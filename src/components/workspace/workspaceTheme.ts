@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 
 import type { AppStyle } from "../../services/appStyle";
+import { motionCss } from "./motion";
 
 /**
  * 两套整体风格共用一份 token 名：
@@ -166,7 +167,7 @@ function declarations(style: AppStyle): string {
 }
 
 export function themeCss(): string {
-  return `:root{${declarations("archive")}}\n:root[data-style="trace"]{${declarations("trace")}}\nhtml,body{background:var(--ws-canvas)}`;
+  return `:root{${declarations("archive")}}\n:root[data-style="trace"]{${declarations("trace")}}\nhtml,body{background:var(--ws-canvas)}\n${motionCss}`;
 }
 
 const STYLE_ID = "content-insights-theme";

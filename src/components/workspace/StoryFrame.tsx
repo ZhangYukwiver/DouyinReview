@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 
+import { fx } from "./motion";
+
 /**
  * 内容年志（public/story 下的静态页）在应用内以同源 iframe 承载：采集器 token 与内存里的记录都还在，
  * 卷尾的「进入持续报告」和导航上的「工作台」通过 postMessage({ type: "trace:open-dashboard" }) 交还给 App。
@@ -12,7 +14,7 @@ export function StoryFrame({ src }: { src: string }) {
   }, [src]);
   if (Platform.OS !== "web") return null;
   return (
-    <View style={styles.root} testID="story-frame">
+    <View {...fx({ motion: "fade" })} style={styles.root} testID="story-frame">
       <iframe ref={frameRef} src={src} style={frameStyle} title="内容年志" />
     </View>
   );

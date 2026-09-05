@@ -6,6 +6,7 @@ import {
   Text as RNText,
   type TextProps,
   View,
+  type ViewStyle,
 } from "react-native";
 import Svg, { Circle, Path, Text as SvgText } from "react-native-svg";
 
@@ -20,6 +21,7 @@ import {
   type ReportModel,
 } from "./ReportWorkspace";
 import { alpha, workspaceColors as color, workspaceFonts as font, workspaceRadii as radius } from "./workspaceTheme";
+import { fx, polylineLength, useCountUp, useDraw, useInView } from "./motion";
 
 export interface ReportDashboardProps {
   mobile: boolean;
@@ -58,17 +60,17 @@ export function ReportDashboard({ mobile, model, onOpenRecord, privacy, width }:
   const tiles: Tile[] = [
     { key: "days", w: 6, h: 108, node: (
       <Cardlet en="ACTIVE DAYS" key="days" title="活跃天数">
-        <Figure sub="/ 365" value={model.activeDays ? String(model.activeDays) : "—"} />
+        <Figure sub="/ 365" value={model.activeDays || "—"} />
       </Cardlet>
     ) },
     { key: "events", w: 7, h: 108, node: (
       <Cardlet en="EVENTS" key="events" title="观测事件">
-        <Figure sub="observed" value={observed ? observed.toLocaleString("en-US") : "—"} />
+        <Figure sub="observed" value={observed || "—"} />
       </Cardlet>
     ) },
     { key: "unique", w: 5, h: 108, node: (
       <Cardlet en="UNIQUE" key="unique" title="去重内容">
-        <Figure sub="unique" value={model.unique ? model.unique.toLocaleString("en-US") : "—"} />
+        <Figure sub="unique" value={model.unique || "—"} />
       </Cardlet>
     ) },
     { key: "attention", w: 6, h: 108, node: (
@@ -196,7 +198,7 @@ export function ReportDashboard({ mobile, model, onOpenRecord, privacy, width }:
       showsVerticalScrollIndicator={false}
     >
       {partial ? (
-        <View style={styles.coverage}>
+        <View {...fx({ motion: "rise" })} style={styles.coverage}>
           <Text style={styles.coverageLabel}>样本覆盖</Text>
           <Text style={styles.coverageText}>
             {model.dated.toLocaleString("zh-CN")} / {model.total.toLocaleString("zh-CN")} 条记录带可靠行为时间
@@ -244,23 +246,30 @@ function Board({ measured, onMeasure, tiles, unit, units }: {
   }
   return (
     <View style={[styles.board, { height: best.rows * PITCH - GAP }]}>
-      {best.placed.map(({ col, h, row, tile, w }) => (
-        <View
+      {best.placed.map(({ col, h, row, tile, w }, index) => (
+        <BoardTile
+          index={index}
           key={tile.key}
-          style={[styles.tile, {
+          style={{
             height: h * PITCH - GAP,
             left: col * (unit + GAP),
             position: "absolute",
             top: row * PITCH,
             width: w * unit + (w - 1) * GAP,
-          }]}
+          }}
         >
           {/* 键带上格宽：宽 A 的实测高不覆盖宽 B 的，打断"量高→变宽→高又变"的振荡环 */}
           <View onLayout={(event) => onMeasure(`${tile.key}@${units}:${w}`, event.nativeEvent.layout.height)}>{tile.node}</View>
-        </View>
+        </BoardTile>
       ))}
     </View>
   );
+}
+
+// 格子滚到视口才上浮进场，同一批露出的按序号错开；悬停微抬。
+function BoardTile({ children, index, style }: { children: React.ReactNode; index: number; style: ViewStyle }) {
+  const [ref, inView] = useInView<View>();
+  return <View {...fx({ reveal: inView, i: (index % 6) + 1, hover: "lift" })} ref={ref} style={[styles.tile, style]}>{children}</View>;
 }
 
 interface Placed { col: number; h: number; row: number; tile: Tile; w: number }
@@ -385,10 +394,11 @@ function Boundary({ model }: { model: ReportModel }) {
 
 /* ---------- 单一职责的图形组件 ---------- */
 
-function Figure({ sub, value }: { sub: string; value: string }) {
+function Figure({ sub, value }: { sub: string; value: string | number }) {
+  const count = useCountUp(typeof value === "number" ? value : 0);
   return (
     <View style={styles.figure}>
-      <Text style={styles.figureValue}>{value}</Text>
+      <Text style={styles.figureValue}>{typeof value === "number" ? count.toLocaleString("en-US") : value}</Text>
       <Text numberOfLines={1} style={styles.figureSub}>{sub}</Text>
     </View>
   );
@@ -424,16 +434,18 @@ function HeatGrid({ heatmap }: { heatmap: number[] }) {
 
 /** 24 小时观看量的面积曲线。 */
 function HourCurve({ peak, values }: { peak: number | null; values: number[] }) {
+  const [ref, t] = useDraw<View>();
   const max = Math.max(1, ...values);
   const points = values.map((value, index) => [index / 23 * 300, 96 - value / max * 82] as [number, number]);
   const line = smoothPath(points);
+  const length = polylineLength(points);
   const peakPoint = peak === null ? null : points[peak];
   return (
-    <View>
+    <View ref={ref}>
       <Svg height={104} preserveAspectRatio="none" viewBox="0 0 300 104" width="100%">
-        <Path d={`${line} L 300 104 L 0 104 Z`} fill={TEAL} fillOpacity={0.16} />
-        <Path d={line} fill="none" stroke={TEAL} strokeWidth={1.4} />
-        {peakPoint ? <Circle cx={peakPoint[0]} cy={peakPoint[1]} fill={GOLD} r={3} /> : null}
+        <Path d={`${line} L 300 104 L 0 104 Z`} fill={TEAL} fillOpacity={0.16 * t} />
+        <Path d={line} fill="none" stroke={TEAL} strokeDasharray={length} strokeDashoffset={length * (1 - t)} strokeWidth={1.4} />
+        {peakPoint ? <Circle cx={peakPoint[0]} cy={peakPoint[1]} fill={GOLD} opacity={t} r={3} /> : null}
       </Svg>
       <View style={styles.axisRow}>
         <Text style={styles.axisText}>00</Text>
@@ -451,8 +463,9 @@ function Ring({ caption, label, tone = TEAL, value }: { caption: string; label: 
   const radius = 39;
   const circumference = 2 * Math.PI * radius;
   const pct = value === null ? 0 : Math.max(0, Math.min(100, value));
+  const [ref, t] = useDraw<View>();
   return (
-    <View style={styles.ringWrap}>
+    <View ref={ref} style={styles.ringWrap}>
       <Svg height={104} viewBox="0 0 104 104" width={104}>
         <Circle cx={52} cy={52} fill="none" r={radius} stroke={color.surfaceMuted} strokeWidth={8} />
         {value !== null ? (
@@ -462,7 +475,7 @@ function Ring({ caption, label, tone = TEAL, value }: { caption: string; label: 
             fill="none"
             r={radius}
             stroke={tone}
-            strokeDasharray={`${circumference * pct / 100} ${circumference}`}
+            strokeDasharray={`${circumference * pct * t / 100} ${circumference}`}
             strokeWidth={8}
             transform="rotate(-90 52 52)"
           />
@@ -479,13 +492,18 @@ function Ring({ caption, label, tone = TEAL, value }: { caption: string; label: 
 
 /** 饼图 / 环形图，附带图例。 */
 function Pie({ donut = false, slices }: { donut?: boolean; slices: Array<{ label: string; sub: string; value: number }> }) {
+  const [ref, t] = useDraw<View>();
   const total = slices.reduce((sum, slice) => sum + Math.max(0, slice.value), 0);
   if (!total) return <Empty text="等待样本" />;
   const inner = donut ? 30 : 0;
   let angle = -Math.PI / 2;
+  // 顺时针扫出：进度 t 决定一共画到哪个角度，各片依次吃掉自己那一段
+  let budget = Math.PI * 2 * t;
   const drawn = slices.filter((slice) => slice.value > 0).map((slice, index) => {
     const sweep = slice.value / total * Math.PI * 2;
-    const path = arcPath(56, 56, 52, inner, angle, angle + Math.min(sweep, Math.PI * 2 - 0.0001));
+    const shown = Math.max(0, Math.min(sweep, budget));
+    budget -= shown;
+    const path = shown > 0.002 ? arcPath(56, 56, 52, inner, angle, angle + Math.min(shown, Math.PI * 2 - 0.0001)) : "";
     angle += sweep;
     return { path, slice, tone: sliceColors[index % sliceColors.length]! };
   });
@@ -502,9 +520,9 @@ function Pie({ donut = false, slices }: { donut?: boolean; slices: Array<{ label
     );
   }
   return (
-    <View style={styles.pieWrap}>
+    <View ref={ref} style={styles.pieWrap}>
       <Svg height={96} viewBox="0 0 112 112" width={96}>
-        {drawn.map(({ path, tone }, index) => <Path d={path} fill={tone} key={index} />)}
+        {drawn.map(({ path, tone }, index) => (path ? <Path d={path} fill={tone} key={index} /> : null))}
         {donut ? <Circle cx={56} cy={56} fill={color.surface} r={inner} /> : null}
       </Svg>
       <View style={styles.legend}>
@@ -556,14 +574,15 @@ function Mosaic({ items }: { items: Array<{ label: string; value: number }> }) {
 
 /** 逐级收窄的漏斗色块。 */
 function Funnel({ steps }: { steps: Array<{ label: string; value: number | null }> }) {
+  const [ref, t] = useDraw<View>();
   return (
-    <View style={styles.funnel}>
+    <View ref={ref} style={styles.funnel}>
       {steps.map((step, index) => (
         <View key={step.label} style={styles.funnelRow}>
           <Text style={styles.funnelLabel}>{step.label}</Text>
           <View style={styles.funnelTrack}>
             <View style={[styles.funnelBlock, {
-              width: `${step.value === null ? 0 : Math.max(3, step.value)}%`,
+              width: `${step.value === null ? 0 : Math.max(3, step.value) * t}%`,
               backgroundColor: index === 0 ? color.funnel0 : index === 1 ? color.funnel1 : index === 2 ? TEAL : GOLD,
             }]} />
           </View>
@@ -576,17 +595,19 @@ function Funnel({ steps }: { steps: Array<{ label: string; value: number | null 
 
 /** 创作者长尾：前三位标注 + 尾部衰减曲线。 */
 function TailCurve({ head, tail }: { head: Array<{ label: string; value: number }>; tail: number[] }) {
+  const [ref, t] = useDraw<View>();
   const series = [...head.map((item) => item.value), ...tail];
   if (series.length < 2) return <Empty text="等待创作者证据" />;
   const max = Math.max(1, ...series);
   const scale = (value: number) => Math.log1p(Math.max(0, value)) / Math.log1p(max);
   const points = series.map((value, index) => [index / (series.length - 1) * 300, 86 - scale(value) * 72] as [number, number]);
   const line = smoothPath(points, 86);
+  const length = polylineLength(points);
   return (
-    <View>
+    <View ref={ref}>
       <Svg height={92} preserveAspectRatio="none" viewBox="0 0 300 92" width="100%">
-        <Path d={`${line} L 300 92 L 0 92 Z`} fill={GOLD} fillOpacity={0.14} />
-        <Path d={line} fill="none" stroke={GOLD} strokeWidth={1.4} />
+        <Path d={`${line} L 300 92 L 0 92 Z`} fill={GOLD} fillOpacity={0.14 * t} />
+        <Path d={line} fill="none" stroke={GOLD} strokeDasharray={length} strokeDashoffset={length * (1 - t)} strokeWidth={1.4} />
       </Svg>
       <View style={styles.headList}>
         {head.map((item, index) => (
@@ -603,19 +624,21 @@ function TailCurve({ head, tail }: { head: Array<{ label: string; value: number 
 
 /** 内容与对话的两条昼夜曲线。 */
 function DualCurve({ chat, watch }: { chat: number[]; watch: number[] }) {
+  const [ref, t] = useDraw<View>();
   const line = (values: number[]) => {
     const max = Math.max(1, ...values);
-    return smoothPath(values.map((value, index) => [index / 23 * 300, 96 - value / max * 78] as [number, number]));
+    const points = values.map((value, index) => [index / 23 * 300, 96 - value / max * 78] as [number, number]);
+    return { d: smoothPath(points), length: polylineLength(points) };
   };
   const watchLine = line(watch);
   const chatLine = line(chat);
   const hasChat = chat.some((value) => value > 0);
   return (
-    <View>
+    <View ref={ref}>
       <Svg height={104} preserveAspectRatio="none" viewBox="0 0 300 104" width="100%">
-        <Path d={`${watchLine} L 300 104 L 0 104 Z`} fill={TEAL} fillOpacity={0.14} />
-        <Path d={watchLine} fill="none" stroke={TEAL} strokeWidth={1.4} />
-        {hasChat ? <Path d={chatLine} fill="none" stroke={GOLD} strokeDasharray="4 3" strokeWidth={1.4} /> : null}
+        <Path d={`${watchLine.d} L 300 104 L 0 104 Z`} fill={TEAL} fillOpacity={0.14 * t} />
+        <Path d={watchLine.d} fill="none" stroke={TEAL} strokeDasharray={watchLine.length} strokeDashoffset={watchLine.length * (1 - t)} strokeWidth={1.4} />
+        {hasChat ? <Path d={chatLine.d} fill="none" opacity={t} stroke={GOLD} strokeDasharray="4 3" strokeWidth={1.4} /> : null}
       </Svg>
       <View style={styles.axisRow}>
         <Text style={styles.axisText}>00</Text>
@@ -634,16 +657,18 @@ function DualCurve({ chat, watch }: { chat: number[]; watch: number[] }) {
 
 /** 十二个月的起伏曲线。 */
 function MonthCurve({ months, peak }: { months: number[]; peak: number | null }) {
+  const [ref, t] = useDraw<View>();
   const max = Math.max(1, ...months);
   const points = months.map((value, index) => [index / 11 * 300, 78 - value / max * 64] as [number, number]);
   const line = smoothPath(points, 78);
+  const length = polylineLength(points);
   const peakPoint = peak === null ? null : points[peak];
   return (
-    <View>
+    <View ref={ref}>
       <Svg height={86} preserveAspectRatio="none" viewBox="0 0 300 86" width="100%">
-        <Path d={`${line} L 300 86 L 0 86 Z`} fill={TEAL} fillOpacity={0.14} />
-        <Path d={line} fill="none" stroke={TEAL} strokeWidth={1.4} />
-        {peakPoint ? <Circle cx={peakPoint[0]} cy={peakPoint[1]} fill={GOLD} r={3} /> : null}
+        <Path d={`${line} L 300 86 L 0 86 Z`} fill={TEAL} fillOpacity={0.14 * t} />
+        <Path d={line} fill="none" stroke={TEAL} strokeDasharray={length} strokeDashoffset={length * (1 - t)} strokeWidth={1.4} />
+        {peakPoint ? <Circle cx={peakPoint[0]} cy={peakPoint[1]} fill={GOLD} opacity={t} r={3} /> : null}
       </Svg>
       <View style={styles.axisRow}>
         {monthNames.filter((_, index) => index % 3 === 0).map((name) => <Text key={name} style={styles.axisText}>{name}</Text>)}
@@ -724,9 +749,10 @@ function Radar({ axes }: { axes: ReportModel["axes"] }) {
   const angle = (index: number) => (-90 + index * 72) * Math.PI / 180;
   const point = (index: number, r: number): [number, number] => [cx + Math.cos(angle(index)) * r, cy + Math.sin(angle(index)) * r];
   const ring = (r: number) => `M ${axes.map((_, index) => point(index, r).join(" ")).join(" L ")} Z`;
-  const shape = `M ${axes.map((axis, index) => point(index, radius * Math.max(0.1, Math.min(1, (axis.value ?? 10) / 100))).join(" ")).join(" L ")} Z`;
+  const [ref, t] = useDraw<View>();
+  const shape = `M ${axes.map((axis, index) => point(index, radius * (0.1 + (Math.max(0.1, Math.min(1, (axis.value ?? 10) / 100)) - 0.1) * t)).join(" ")).join(" L ")} Z`;
   return (
-    <View>
+    <View ref={ref}>
       <Svg height={168} viewBox="0 0 200 168" width="100%">
         {[0.35, 0.7, 1].map((scale) => <Path d={ring(radius * scale)} fill="none" key={scale} stroke={color.border} strokeWidth={0.8} />)}
         {axes.map((axis, index) => (
@@ -782,6 +808,7 @@ function EventList({ items, onOpenRecord, privacy }: {
             accessibilityRole={canOpen ? "link" : undefined}
             disabled={!canOpen}
             onPress={() => item.url && void onOpenRecord(item.url)}
+            {...fx({ hover: "tint" })}
             style={({ pressed }) => [styles.event, pressed && styles.pressed]}
           >
             <Text style={styles.eventRank}>{pad(index + 1)}</Text>

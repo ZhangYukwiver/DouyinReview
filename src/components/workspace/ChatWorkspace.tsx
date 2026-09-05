@@ -40,6 +40,7 @@ import {
   hasChatShareEvidence,
 } from "../../domain/chatRecords";
 import { alpha, workspaceColors as color, workspaceFonts as font, workspaceRadii as radius } from "./workspaceTheme";
+import { fx } from "./motion";
 
 const webPointer = Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null;
 const CHAT_MESSAGE_RENDER_LIMIT = 320;
@@ -270,6 +271,7 @@ export function ChatWorkspace({
             />
           ) : null}
           <ChatDetailPane
+            key={selectedForDetail?.id ?? "none"}
             mobile={mobile}
             onBack={() => setMobileDetail(false)}
             onOpenRecord={onOpenRecord}
@@ -332,6 +334,7 @@ function ChatListPane({
         <Pressable
           accessibilityLabel="聚焦搜索聊天"
           accessibilityRole="button"
+          {...fx({ hover: "raise" })}
           onPress={onFocusSearch}
           style={({ pressed }) => [styles.iconButton, pressed && styles.pressed, webPointer]}
         >
@@ -368,6 +371,7 @@ function ChatListPane({
             accessibilityRole="tab"
             accessibilityState={{ selected: filter === item.id }}
             key={item.id}
+            {...fx({ hover: "tint" })}
             onPress={() => onChangeFilter(item.id)}
             style={({ pressed }) => [styles.filterTab, filter === item.id && styles.filterTabActive, pressed && styles.pressed, webPointer]}
           >
@@ -384,8 +388,9 @@ function ChatListPane({
         ListEmptyComponent={(
           <ChatListEmpty busy={busy} hasQuery={Boolean(query.trim())} onOpenSettings={onOpenSettings} privacy={privacy} />
         )}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <ConversationListItem
+            index={index}
             onPress={() => onSelect(item)}
             privacy={privacy}
             row={item}
@@ -400,11 +405,13 @@ function ChatListPane({
 }
 
 function ConversationListItem({
+  index,
   onPress,
   privacy,
   row,
   selected,
 }: {
+  index: number;
   onPress: () => void;
   privacy: boolean;
   row: ChatConversationRow;
@@ -416,6 +423,7 @@ function ConversationListItem({
   const activeRecently = age >= 0 && age < 86_400_000;
   return (
     <Pressable
+      {...fx({ motion: "rise", i: index < 12 ? index + 1 : 0, hover: "tint" })}
       accessibilityLabel={`${visibleName}，${row.messageCount} 条聊天消息`}
       accessibilityRole="button"
       onPress={onPress}
@@ -442,7 +450,7 @@ function ConversationListItem({
 function ChatListEmpty({ busy, hasQuery, onOpenSettings, privacy }: { busy: boolean; hasQuery: boolean; onOpenSettings: () => void; privacy: boolean }) {
   if (hasQuery) {
     return (
-      <View style={styles.listEmptyState}>
+      <View {...fx({ motion: "rise" })} style={styles.listEmptyState}>
         <Search color={color.textMuted} size={26} strokeWidth={1.7} />
         <Text style={styles.listEmptyTitle}>没有匹配的会话</Text>
         <Text style={styles.listEmptyBody}>换一个关键词试试。</Text>
@@ -450,7 +458,7 @@ function ChatListEmpty({ busy, hasQuery, onOpenSettings, privacy }: { busy: bool
     );
   }
   return (
-    <View style={styles.listEmptyState}>
+    <View {...fx({ motion: "rise" })} style={styles.listEmptyState}>
       <View style={styles.emptyChatIcon}><MessageCircle color={color.cyan} size={25} strokeWidth={1.8} /></View>
       <Text style={styles.listEmptyTitle}>{busy ? "正在整理聊天" : "还没有聊天快照"}</Text>
       <Text style={styles.listEmptyBody}>{privacy ? "隐私模式已开启；读取后仍只在本机显示。" : "连接采集器后读取聊天，即可在这里回看好友对话。"}</Text>
@@ -521,7 +529,7 @@ function ChatDetailPane({
   if (!row) {
     return (
       <View style={[styles.detailPane, mobile && styles.detailPaneMobile]}>
-        <View style={styles.detailEmptyState}>
+        <View {...fx({ motion: "rise" })} style={styles.detailEmptyState}>
           <View style={styles.emptyChatIcon}><MessageCircle color={color.cyan} size={26} strokeWidth={1.8} /></View>
           <Text style={styles.detailEmptyTitle}>选择一个会话</Text>
           <Text style={styles.detailEmptyBody}>从左侧列表打开好友对话。</Text>
@@ -545,7 +553,7 @@ function ChatDetailPane({
   };
 
   return (
-    <View style={[styles.detailPane, mobile && styles.detailPaneMobile]}>
+    <View {...fx({ motion: "fade" })} style={[styles.detailPane, mobile && styles.detailPaneMobile]}>
       <View style={styles.detailHeader}>
         {mobile ? (
           <Pressable accessibilityLabel="返回聊天列表" accessibilityRole="button" onPress={onBack} style={({ pressed }) => [styles.detailBackButton, pressed && styles.pressed, webPointer]}>
@@ -600,7 +608,8 @@ function ChatDetailPane({
           }}
           onScroll={handleMessageScroll}
           ref={messageListRef}
-          renderItem={({ item }) => <ChatMessageBubble message={item} onOpenRecord={onOpenRecord} privacy={privacy} row={row} selfId={selfId} />}
+          // 最后八条依次入场（越靠底越晚），像消息刚刚到达
+          renderItem={({ item, index }) => <ChatMessageBubble i={Math.max(0, index - (visibleMessages.length - 8) + 1)} message={item} onOpenRecord={onOpenRecord} privacy={privacy} row={row} selfId={selfId} />}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
           style={styles.messageList}
@@ -648,7 +657,7 @@ function ConversationDateDivider() {
 
 function MessageListEmpty({ privacy }: { privacy: boolean }) {
   return (
-    <View style={styles.messageEmptyState}>
+    <View {...fx({ motion: "rise" })} style={styles.messageEmptyState}>
       <MessageCircle color={color.textMuted} size={24} strokeWidth={1.6} />
       <Text style={styles.messageEmptyText}>{privacy ? "消息正文已隐藏" : "这个会话没有可显示的正文"}</Text>
     </View>
@@ -656,12 +665,14 @@ function MessageListEmpty({ privacy }: { privacy: boolean }) {
 }
 
 function ChatMessageBubble({
+  i = 0,
   message,
   onOpenRecord,
   privacy,
   row,
   selfId,
 }: {
+  i?: number;
   message: ChatMessage;
   onOpenRecord: (url: string) => Promise<void>;
   privacy: boolean;
@@ -678,7 +689,7 @@ function ChatMessageBubble({
   // padding so the sticker is shown on its own.
   const framelessSticker = !privacy && message.type === "sticker" && Boolean(message.mediaUrl);
   return (
-    <View style={[styles.messageLine, own && styles.messageLineOwn]}>
+    <View {...fx({ motion: "rise", i })} style={[styles.messageLine, own && styles.messageLineOwn]}>
       {!own ? <ChatAvatar avatarUrl={row.avatarUrl} accent={row.accent} initials={initialsFor(sender, "friend")} kind="friend" privacy={privacy} size={30} /> : null}
       <View style={[styles.messageColumn, own && styles.messageColumnOwn]}>
         {!own ? <Text style={styles.senderLabel}>{sender}</Text> : null}
@@ -802,7 +813,7 @@ function ChatAvatar({
           style={[styles.avatarImage, { width: size, height: size, borderRadius: size / 2 }]}
         />
       ) : kind === "group" ? <UsersRound color={accent} size={Math.round(size * 0.45)} strokeWidth={1.8} /> : <Text style={[styles.avatarText, { color: accent, fontSize: Math.max(11, Math.round(size * 0.32)) }]}>{initials}</Text>}
-      {online ? <View style={[styles.onlineDot, { width: Math.max(7, Math.round(size * 0.2)), height: Math.max(7, Math.round(size * 0.2)), borderRadius: size, borderColor: color.sidebar }]} /> : null}
+      {online ? <View {...fx({ motion: "pulse" })} style={[styles.onlineDot, { width: Math.max(7, Math.round(size * 0.2)), height: Math.max(7, Math.round(size * 0.2)), borderRadius: size, borderColor: color.sidebar }]} /> : null}
     </View>
   );
 }
