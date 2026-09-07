@@ -49,12 +49,13 @@ import type {
 } from "../../domain/personalRecords";
 import type { CollectorStatus } from "../../services/localCollector";
 import type { AppStyle } from "../../services/appStyle";
+import Svg, { Circle } from "react-native-svg";
 import { ChatWorkspace } from "./ChatWorkspace";
-import { ReportDashboard } from "./ReportDashboard";
 import { RecordVideoPlayer, type RecordVideoLoader } from "./RecordVideoPlayer";
+import { ReportDashboard } from "./ReportDashboard";
 import { buildReportModel } from "./ReportWorkspace";
 import { alpha, workspaceColors as color, workspaceFonts as font, workspaceRadii as radius } from "./workspaceTheme";
-import { ease, easeImage, fx, useCountUp, useInView } from "./motion";
+import { ease, easeImage, fx, useCountUp, useDraw, useInView } from "./motion";
 
 export type WorkspaceViewKey = PersonalRecordType | "summary" | "highlights" | "chat";
 
@@ -71,8 +72,8 @@ export interface ContentWorkspaceProps {
   onChangeView: (view: WorkspaceViewKey) => void;
   onOpenRecord: (url: string) => Promise<void>;
   onDownloadRecord?: (record: PersonalVideoRecord) => Promise<void>;
-  downloadStates?: Record<string, RecordDownloadState>;
   onLoadVideo?: RecordVideoLoader;
+  downloadStates?: Record<string, RecordDownloadState>;
   onOpenSettings: () => void;
   onReplayStory: () => void;
   onSync: () => void;
@@ -100,10 +101,13 @@ const navItems: Array<{ id: WorkspaceViewKey; label: string; icon: IconComponent
   { id: "highlights", label: "变化线索", icon: Star, accent: color.cyan },
 ];
 
-const recordNavItems = navItems.slice(0, 4);
-const annualNavItems = navItems.slice(4);
 
 const webPointer = Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null;
+
+// 侧栏收放是同一套版式在变窄：宽度做过渡，展开态的文字原地淡出并被侧栏裁掉，不换一套窄版面。
+const COLLAPSE_MS = 380;
+const collapseWidth = ease("width", COLLAPSE_MS);
+const collapseCopy = ease("opacity", 220);
 
 // ponytail: 包一层给全页默认正文字体（档案馆衬线 / 年志 Inter），比给上百条 style 逐个加 fontFamily 省
 const bodyType = { fontFamily: font.body } as const;
@@ -124,11 +128,11 @@ export function ContentWorkspace({
   onChangeView,
   onOpenRecord,
   onDownloadRecord,
+  onLoadVideo,
   downloadStates = {},
   onOpenSettings,
   onReplayStory,
   onSync,
-  onLoadVideo,
   onTogglePrivacy,
   privacy,
   appStyle = "archive",
@@ -183,6 +187,7 @@ export function ContentWorkspace({
   }, [reportView]);
 
   const shownCount = useCountUp(counts[activeView]);
+  const [ringRef, ringDrawn] = useDraw<View>();
 
   const changeView = (nextView: WorkspaceViewKey) => {
     if (isReportView(nextView) && !reportView) setReportAutoCollapsed(true);
@@ -202,26 +207,13 @@ export function ContentWorkspace({
       <View style={[styles.stage, mobile && styles.stageMobile]}>
       {!mobile ? <SidebarToggle collapsed={compactSidebar} onPress={toggleSidebar} /> : null}
       {!mobile ? (
-        <View testID="workspace-sidebar" style={[styles.sidebar, compactSidebar && styles.sidebarCompact]}>
-          <Brand compact={compactSidebar} trace={trace} />
+        <View testID="workspace-sidebar" style={[styles.sidebar, collapseWidth, compactSidebar && styles.sidebarCompact]}>
+          <View style={styles.sidebarBody}>
           <View accessibilityRole="tablist" style={styles.sidebarNav}>
             {Platform.OS === "web" && navTops[activeView] !== undefined ? (
-              <View pointerEvents="none" style={[styles.navGlider, compactSidebar && styles.navGliderCompact, ease("top,background-color", 380), { top: navTops[activeView]! + 14, backgroundColor: currentNav.accent }]} />
+              <View pointerEvents="none" style={[styles.navGlider, ease("top,background-color", 380), { top: navTops[activeView]! + 14, backgroundColor: currentNav.accent }]} />
             ) : null}
-            {!compactSidebar ? <Text style={styles.sidebarSectionLabel}>内容记录</Text> : null}
-            {recordNavItems.map((item) => (
-              <NavButton
-                key={item.id}
-                compact={compactSidebar}
-                count={counts[item.id]}
-                item={item}
-                onLayoutTop={(y) => reportNavTop(item.id, y)}
-                onPress={() => changeView(item.id)}
-                selected={item.id === activeView}
-              />
-            ))}
-            {!compactSidebar ? <Text style={[styles.sidebarSectionLabel, styles.sidebarSectionLabelAnnual]}>持续报告</Text> : <View style={styles.sidebarCompactDivider} />}
-            {annualNavItems.map((item) => (
+            {navItems.map((item) => (
               <NavButton
                 key={item.id}
                 compact={compactSidebar}
@@ -233,6 +225,8 @@ export function ContentWorkspace({
               />
             ))}
           </View>
+          <ActiveDays compact={compactSidebar} days={model.activeDays} drawn={ringDrawn} viewRef={ringRef} year={model.year} />
+          </View>
           <View style={styles.sidebarFooter}>
             <Pressable
               accessibilityLabel={replayLabel}
@@ -242,33 +236,25 @@ export function ContentWorkspace({
               onPress={onReplayStory}
               style={({ pressed }) => [
                 styles.navButton,
-                compactSidebar && styles.navButtonCompact,
                 (!report || report.status === "empty") && styles.buttonDisabled,
                 pressed && styles.buttonPressed,
                 webPointer,
               ]}
             >
               <View style={styles.navIconWrap}><Sparkles color={color.accent} size={20} strokeWidth={2} /></View>
-              {!compactSidebar ? <Text style={styles.navLabel}>{replayLabel}</Text> : null}
-            </Pressable>
-            {!compactSidebar ? (
-              <View style={styles.localBadge}>
-                <View style={styles.localBadgeDot} />
-                <View style={styles.localBadgeCopy}>
-                  <Text numberOfLines={1} style={styles.localBadgeTitle}>{sourceLabel}</Text>
-                  <Text numberOfLines={1} style={styles.localBadgeMeta}>{updatedAt ? `更新 ${formatShortDate(updatedAt)}` : "本地数据"}</Text>
-                </View>
+              <View style={[styles.navMeta, collapseCopy, compactSidebar && styles.sidebarCopyHidden]}>
+                <Text numberOfLines={1} style={styles.navLabel}>{replayLabel}</Text>
               </View>
-            ) : null}
+            </Pressable>
             <Pressable
               {...fx({ hover: "raise" })}
               accessibilityLabel="打开连接与采集设置"
               accessibilityRole="button"
               onPress={onOpenSettings}
-              style={({ pressed }) => [styles.settingsButton, compactSidebar && styles.settingsButtonCompact, pressed && styles.buttonPressed, webPointer]}
+              style={({ pressed }) => [styles.settingsButton, pressed && styles.buttonPressed, webPointer]}
             >
-              <Settings2 color={color.textSecondary} size={19} strokeWidth={2} />
-              {!compactSidebar ? <Text style={styles.settingsButtonText}>连接与采集</Text> : null}
+              <View style={styles.settingsIcon}><Settings2 color={color.textSecondary} size={19} strokeWidth={2} /></View>
+              <Text numberOfLines={1} style={[styles.settingsButtonText, collapseCopy, compactSidebar && styles.sidebarCopyHidden]}>连接与采集</Text>
             </Pressable>
           </View>
         </View>
@@ -352,7 +338,6 @@ export function ContentWorkspace({
           />
         ) : activeView === "summary" ? (
           model.status === "empty"
-            onLoadVideo={onLoadVideo}
             ? <SummaryEmpty />
             : <ReportDashboard mobile={mobile} model={model} onOpenRecord={onOpenRecord} privacy={privacy} width={mainWidth} />
         ) : activeView === "highlights" ? (
@@ -367,6 +352,7 @@ export function ContentWorkspace({
             downloadStates={downloadStates}
             mobile={mobile}
             onDownloadRecord={onDownloadRecord}
+            onLoadVideo={onLoadVideo}
             onOpenRecord={onOpenRecord}
             onOpenSettings={onOpenSettings}
             privacy={privacy}
@@ -424,6 +410,27 @@ export function ContentWorkspace({
   );
 }
 
+function ActiveDays({ compact, days, drawn, viewRef, year }: { compact: boolean; days: number; drawn: number; viewRef: React.RefObject<View | null>; year: number }) {
+  const radius = 14;
+  const circumference = 2 * Math.PI * radius;
+  const filled = circumference * Math.min(1, days / 365) * drawn;
+  return (
+    <View ref={viewRef} style={styles.activeDays}>
+      <View style={styles.navIconWrap}>
+        <Svg height={34} viewBox="0 0 34 34" width={34}>
+          <Circle cx={17} cy={17} fill="none" r={radius} stroke={color.border} strokeWidth={3} />
+          <Circle cx={17} cy={17} fill="none" r={radius} stroke={color.cyan} strokeDasharray={`${filled} ${circumference}`} strokeWidth={3} transform="rotate(-90 17 17)" />
+        </Svg>
+      </View>
+      <View style={[styles.navMeta, collapseCopy, compact && styles.sidebarCopyHidden]}>
+        <Text numberOfLines={1} style={styles.activeDaysText}>
+          {days ? `${year} 年有 ${days} 天留下记录` : `${year} 年还没有留下记录`}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 function SidebarToggle({ collapsed, onPress }: { collapsed: boolean; onPress: () => void }) {
   const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
   return (
@@ -438,24 +445,6 @@ function SidebarToggle({ collapsed, onPress }: { collapsed: boolean; onPress: ()
     >
       <ToggleIcon color={color.textSecondary} size={17} strokeWidth={1.9} />
     </Pressable>
-  );
-}
-
-function Brand({ compact, trace }: { compact: boolean; trace: boolean }) {
-  return (
-    <View style={[styles.brand, compact && styles.brandCompact]}>
-      <View style={styles.brandMarkWrap}>
-        <View style={styles.brandMarkCyan} />
-        <View style={styles.brandMarkRed} />
-        <View style={styles.brandMarkCore}><Play color={color.white} fill={color.white} size={12} /></View>
-      </View>
-      {!compact ? (
-        <View>
-          <Text style={styles.brandName}>{trace ? "内容年志" : "足迹"}</Text>
-          <Text style={styles.brandMeta}>{trace ? "TRACE · ANNUAL" : "我的内容档案"}</Text>
-        </View>
-      ) : null}
-    </View>
   );
 }
 
@@ -486,7 +475,6 @@ function NavButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.navButton,
-        compact && styles.navButtonCompact,
         selected && styles.navButtonSelected,
         pressed && styles.buttonPressed,
         webPointer,
@@ -495,14 +483,11 @@ function NavButton({
       <View style={[styles.navIconWrap, selected && { backgroundColor: alpha(item.accent, 0.13) }]}>
         <Icon color={selected ? item.accent : color.textMuted} size={20} strokeWidth={selected ? 2.5 : 2} />
       </View>
-      {!compact ? (
-        <>
-  onLoadVideo,
-          <Text style={[styles.navLabel, selected && styles.navLabelSelected]}>{item.label}</Text>
-          <Text style={[styles.navCount, selected && { color: item.accent }]}>{formatCompactNumber(count)}</Text>
-        </>
-      ) : null}
-      {selected && Platform.OS !== "web" ? <View style={[styles.navIndicator, compact && styles.navIndicatorCompact, { backgroundColor: item.accent }]} /> : null}
+      <View style={[styles.navMeta, collapseCopy, compact && styles.sidebarCopyHidden]}>
+        <Text numberOfLines={1} style={[styles.navLabel, selected && styles.navLabelSelected]}>{item.label}</Text>
+        <Text style={[styles.navCount, selected && { color: item.accent }]}>{formatCompactNumber(count)}</Text>
+      </View>
+      {selected && Platform.OS !== "web" ? <View style={[styles.navIndicator, { backgroundColor: item.accent }]} /> : null}
     </Pressable>
   );
 }
@@ -510,9 +495,9 @@ function NavButton({
 function RecordsGallery({
   activeType,
   downloadStates,
-  onLoadVideo?: RecordVideoLoader;
   mobile,
   onDownloadRecord,
+  onLoadVideo,
   onOpenRecord,
   onOpenSettings,
   privacy,
@@ -520,14 +505,12 @@ function RecordsGallery({
   sourceLabel,
   status,
   width,
-  const [playingRecord, setPlayingRecord] = useState<PersonalVideoRecord | null>(null);
-  useEffect(() => { setPlayingRecord(null); }, [activeType, privacy]);
 }: {
   activeType: PersonalRecordType;
   downloadStates: Record<string, RecordDownloadState>;
   mobile: boolean;
   onDownloadRecord?: (record: PersonalVideoRecord) => Promise<void>;
-    <>
+  onLoadVideo?: RecordVideoLoader;
   onOpenRecord: (url: string) => Promise<void>;
   onOpenSettings: () => void;
   privacy: boolean;
@@ -537,11 +520,14 @@ function RecordsGallery({
   width: number;
 }) {
   const [layout, setLayout] = useState<"grid" | "list">("grid");
+  const [playingRecord, setPlayingRecord] = useState<PersonalVideoRecord | null>(null);
+  useEffect(() => { setPlayingRecord(null); }, [activeType, privacy]);
   const columns = mobile ? 2 : width < 760 ? 3 : width < 1120 ? 4 : 5;
   const label = ({ watch_history: "观看历史", liked_videos: "喜欢", favorite_videos: "收藏" })[activeType];
   const sortedRecords = useMemo(() => records, [records]);
 
   return (
+    <>
     <FlatList
       testID="record-grid"
       key={`${layout}:${columns}`}
@@ -583,7 +569,6 @@ function RecordsGallery({
           <Text style={styles.emptyTitle}>{label}还没有内容</Text>
           <Text style={styles.emptyDetail}>返回连接与采集页面读取本地记录。</Text>
           <Pressable
-            onPlayRecord={onLoadVideo ? setPlayingRecord : undefined}
             accessibilityRole="button"
             onPress={onOpenSettings}
             style={({ pressed }) => [styles.emptyButton, pressed && styles.buttonPressed, webPointer]}
@@ -592,17 +577,13 @@ function RecordsGallery({
             <Text style={styles.emptyButtonText}>连接与采集</Text>
           </Pressable>
         </View>
-    {Platform.OS === "web" && playingRecord && !privacy && onLoadVideo ? (
-      <RecordVideoPlayer record={playingRecord} onLoadVideo={onLoadVideo} onClose={() => setPlayingRecord(null)} />
-    ) : null}
-    </>
       )}
       numColumns={layout === "grid" ? columns : 1}
       renderItem={({ item }) => layout === "grid"
         ? <RecordTile
             downloadState={downloadStates[item.id] ?? "idle"}
             onDownloadRecord={onDownloadRecord}
-  onPlayRecord,
+            onPlayRecord={onLoadVideo ? setPlayingRecord : undefined}
             onOpenRecord={onOpenRecord}
             privacy={privacy}
             record={item}
@@ -610,14 +591,18 @@ function RecordsGallery({
           />
         : <RecordRow onOpenRecord={onOpenRecord} privacy={privacy} record={item} type={activeType} />}
       showsVerticalScrollIndicator={false}
-  onPlayRecord?: (record: PersonalVideoRecord) => void;
     />
+    {Platform.OS === "web" && playingRecord && !privacy && onLoadVideo ? (
+      <RecordVideoPlayer record={playingRecord} onLoadVideo={onLoadVideo} onClose={() => setPlayingRecord(null)} />
+    ) : null}
+    </>
   );
 }
 
 function RecordTile({
   downloadState,
   onDownloadRecord,
+  onPlayRecord,
   record,
   type,
   privacy,
@@ -625,6 +610,7 @@ function RecordTile({
 }: {
   downloadState: RecordDownloadState;
   onDownloadRecord?: (record: PersonalVideoRecord) => Promise<void>;
+  onPlayRecord?: (record: PersonalVideoRecord) => void;
   record: PersonalVideoRecord;
   type: PersonalRecordType;
   privacy: boolean;
@@ -716,19 +702,6 @@ function RecordTile({
             {record.watchProgress?.percent !== undefined && record.watchProgress.percent !== null ? (
               <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.max(2, Math.min(100, record.watchProgress.percent))}%`, backgroundColor: accent }]} /></View>
             ) : null}
-          {onPlayRecord ? (
-            <Pressable
-              testID="record-tile-action"
-              accessibilityLabel="播放视频"
-              accessibilityRole="button"
-              onFocus={markFocused}
-              onBlur={checkFocusBoundary}
-              onPress={() => onPlayRecord(record)}
-              style={({ pressed }) => [styles.tilePlayButton, pressed && styles.tileActionPressed, webPointer]}
-            >
-              <Play color={color.white} fill={color.white} size={28} style={{ marginLeft: 3 }} />
-            </Pressable>
-          ) : null}
             <View style={styles.tilePlayMeta}>
               <Play color={color.white} fill={color.white} size={12} />
               <Text style={styles.tilePlayText}>{record.stats?.playCount ? formatCompactNumber(record.stats.playCount) : "记录"}</Text>
@@ -743,6 +716,19 @@ function RecordTile({
       </Pressable>
       {showActions ? (
         <View {...fx({ motion: "fade" })} pointerEvents="auto" style={styles.tileActionsOverlay}>
+          {onPlayRecord ? (
+            <Pressable
+              testID="record-tile-action"
+              accessibilityLabel="播放视频"
+              accessibilityRole="button"
+              onFocus={markFocused}
+              onBlur={checkFocusBoundary}
+              onPress={() => onPlayRecord(record)}
+              style={({ pressed }) => [styles.tilePlayButton, pressed && styles.tileActionPressed, webPointer]}
+            >
+              <Play color={color.white} fill={color.white} size={28} style={{ marginLeft: 3 }} />
+            </Pressable>
+          ) : null}
           <View style={styles.tileActionsRow}>
             <Pressable
               testID="record-tile-action"
@@ -1150,41 +1136,29 @@ const styles = StyleSheet.create({
   cornerTR: { right: 8, top: 8, borderRightWidth: 1, borderTopWidth: 1 },
   cornerBL: { left: 8, bottom: 8, borderLeftWidth: 1, borderBottomWidth: 1 },
   cornerBR: { right: 8, bottom: 8, borderRightWidth: 1, borderBottomWidth: 1 },
-  sidebar: { width: 224, flexShrink: 0, paddingHorizontal: 14, paddingBottom: 16, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: color.border, backgroundColor: color.sidebar },
-  sidebarCompact: { width: 82, paddingHorizontal: 9 },
+  // 收起态只改宽度：内边距、图标位置、各行高度都不变，窄侧栏是宽侧栏被裁出来的。
+  sidebar: { width: 224, flexShrink: 0, paddingHorizontal: 14, paddingBottom: 16, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: color.border, backgroundColor: color.sidebar, overflow: "hidden" },
+  sidebarCompact: { width: 82 },
+  sidebarCopyHidden: { opacity: 0 },
   sidebarToggle: { position: "absolute", left: 14, top: 2, width: 32, height: 32, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: color.borderSoft, borderRadius: radius.medium, backgroundColor: color.surface, zIndex: 5 },
-  brand: { height: 72, flexDirection: "row", alignItems: "center", gap: 11, paddingRight: 10, paddingLeft: 52 },
-  brandCompact: { justifyContent: "center", paddingLeft: 0, paddingRight: 0, paddingTop: 34 },
-  brandMarkWrap: { width: 38, height: 38, position: "relative", alignItems: "center", justifyContent: "center" },
-  brandMarkCyan: { position: "absolute", width: 26, height: 26, left: 3, top: 4, borderRadius: 2, backgroundColor: color.cyan },
-  brandMarkRed: { position: "absolute", width: 26, height: 26, right: 3, bottom: 4, borderRadius: 2, backgroundColor: color.accent },
-  brandMarkCore: { width: 26, height: 26, zIndex: 2, alignItems: "center", justifyContent: "center", borderRadius: 2, backgroundColor: color.black },
-  brandName: { color: color.text, fontSize: 17, fontWeight: "700", letterSpacing: 4, fontFamily: font.serif },
-  brandMeta: { color: color.textMuted, fontSize: 10, letterSpacing: 1.4, marginTop: 3, fontFamily: font.mono },
-  sidebarNav: { flex: 1, gap: 4, paddingTop: 20 },
-  sidebarSectionLabel: { color: color.textMuted, fontSize: 9, fontWeight: "700", letterSpacing: 3, paddingHorizontal: 8, paddingBottom: 7 },
-  sidebarSectionLabelAnnual: { marginTop: 15 },
-  sidebarCompactDivider: { height: 1, marginHorizontal: 8, marginVertical: 10, backgroundColor: color.border },
+  sidebarBody: { flex: 1, paddingTop: 46 },
+  sidebarNav: { gap: 4 },
+  activeDays: { flexDirection: "row", alignItems: "center", minHeight: 44, marginTop: 26, paddingHorizontal: 8 },
+  activeDaysText: { flex: 1, color: color.textMuted, fontSize: 10, marginLeft: 7 },
   navButton: { position: "relative", minHeight: 52, flexDirection: "row", alignItems: "center", paddingHorizontal: 8, borderRadius: radius.medium },
-  navButtonCompact: { justifyContent: "center", paddingHorizontal: 0 },
+  // 展开态的文字块固定宽度：侧栏变窄时它被裁掉，而不是挤成省略号。
+  navMeta: { width: 144, flexShrink: 0, flexDirection: "row", alignItems: "center" },
   navButtonSelected: { backgroundColor: color.surfaceRaised },
   navIconWrap: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: radius.medium },
   navLabel: { flex: 1, color: color.textSecondary, fontSize: 13, fontWeight: "600", letterSpacing: 2, marginLeft: 7 },
   navLabelSelected: { color: color.text, fontWeight: "700" },
   navCount: { color: color.textMuted, fontSize: 11, fontFamily: font.didot, letterSpacing: 0.5, marginRight: 6 },
   navIndicator: { position: "absolute", left: -14, top: 14, bottom: 14, width: 3, borderTopRightRadius: 2, borderBottomRightRadius: 2 },
-  navIndicatorCompact: { left: -9 },
   navGlider: { position: "absolute", left: -14, width: 3, height: 24, borderTopRightRadius: 2, borderBottomRightRadius: 2 },
-  navGliderCompact: { left: -9 },
   sidebarFooter: { gap: 8 },
-  localBadge: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  localBadgeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.green },
-  localBadgeCopy: { flex: 1, minWidth: 0 },
-  localBadgeTitle: { color: color.textSecondary, fontSize: 11, fontWeight: "600", letterSpacing: 1 },
-  localBadgeMeta: { color: color.textMuted, fontSize: 9, marginTop: 3 },
   settingsButton: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 17, borderWidth: 1, borderColor: color.border, borderRadius: radius.medium, backgroundColor: color.surface },
-  settingsButtonCompact: { justifyContent: "center", paddingHorizontal: 0 },
-  settingsButtonText: { color: color.textSecondary, fontSize: 12, fontWeight: "600", letterSpacing: 2 },
+  settingsIcon: { width: 19, height: 19 },
+  settingsButtonText: { flexShrink: 0, color: color.textSecondary, fontSize: 12, fontWeight: "600", letterSpacing: 2 },
   main: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: "transparent" },
   mainMobile: { paddingBottom: 68 },
   topbar: { height: 72, flexDirection: "row", alignItems: "center", paddingHorizontal: 28, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.border, backgroundColor: "transparent" },
@@ -1220,11 +1194,6 @@ const styles = StyleSheet.create({
   fallbackVisual: { flex: 1, alignItems: "center", justifyContent: "center" },
   fallbackDisc: { width: 62, height: 62, alignItems: "center", justifyContent: "center", borderWidth: 1, borderRadius: 31, backgroundColor: color.scrim },
   fallbackIndex: { position: "absolute", right: 10, bottom: 8, color: color.text, opacity: 0.2, fontSize: 30, fontWeight: "900" },
-  tilePlayButton: {
-    position: "absolute", top: "50%", left: "50%", marginTop: -30, marginLeft: -30,
-    width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center",
-    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.85)", backgroundColor: "rgba(20,24,23,0.55)",
-  },
   tileTopMeta: { position: "absolute", top: 9, right: 9, left: 9, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   typeBadge: { width: 8, height: 8, borderRadius: 4 },
   durationBadge: { color: color.white, fontSize: 10, fontWeight: "800", paddingHorizontal: 6, paddingVertical: 3, borderRadius: radius.small, backgroundColor: color.scrim },
@@ -1251,6 +1220,11 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   tileActionsRow: { flexDirection: "row", gap: 8 },
+  tilePlayButton: {
+    position: "absolute", top: "50%", left: "50%", marginTop: -30, marginLeft: -30,
+    width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center",
+    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.85)", backgroundColor: "rgba(20,24,23,0.55)",
+  },
   tileAction: {
     minHeight: 34,
     flex: 1,
