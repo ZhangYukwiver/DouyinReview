@@ -95,7 +95,8 @@ export interface StoryData {
   fields: StoryFieldCoverage[];
   reliableRatio: number;
   caveats: { noTime: number; noVideoId: number; warnings: number };
-  profile: { title: string; english: string; reason: string };
+  /** title/english = 三个词的落款；name/reading = 这三个词合起来的名字和一段读法。 */
+  profile: { title: string; english: string; name: string; nameEnglish: string; reading: string };
 }
 
 export interface StoryInput {
@@ -207,7 +208,7 @@ export function buildStoryData(model: ReportModel, input: StoryInput): StoryData
   const longestRow = rows.filter(({ record }) => typeof record.durationSeconds === "number" && Number.isFinite(record.durationSeconds)).sort((a, b) => b.record.durationSeconds! - a.record.durationSeconds!)[0];
   const length: StoryLength = { seconds: model.attentionSeconds, medianDuration: lengths.length ? median(lengths) : null, longest: longestRow ? { title: longestRow.record.title?.trim() || "未命名内容", seconds: longestRow.record.durationSeconds! } : null };
 
-  return {
+  const data: Signed = {
     version: 1,
     generatedAt: new Date().toISOString(),
     // The volume is dated by its latest reliable record, not by the report window.
@@ -245,7 +246,125 @@ export function buildStoryData(model: ReportModel, input: StoryInput): StoryData
     fields,
     reliableRatio: model.reliableRatio,
     caveats: { noTime: timeSources.unknown, noVideoId: rows.filter(({ record }) => !record.videoId).length, warnings: input.warnings.length },
-    profile: { title: model.profile, english: model.profileEnglish, reason: model.profileReason },
+  };
+  // The badge title from the report is deliberately left out: the volume signs itself.
+  return { ...data, profile: storySignature(data) };
+}
+
+/**
+ * 落款 = 三个词，一个列表出一个：什么时候看、看的是什么、看完怎么处理。
+ * Ordinary words picked by the snapshot, not a badge and not a verdict on the person.
+ */
+type Signed = Omit<StoryData, "profile">;
+type Word = { zh: string; en: string; test: (data: Signed) => boolean };
+
+const WHEN = [
+  { from: 0, zh: "凌晨", en: "SMALL HOURS" },
+  { from: 5, zh: "清晨", en: "FIRST LIGHT" },
+  { from: 9, zh: "上午", en: "MORNING" },
+  { from: 12, zh: "正午", en: "MIDDAY" },
+  { from: 14, zh: "午后", en: "AFTERNOON" },
+  { from: 18, zh: "傍晚", en: "DUSK" },
+  { from: 21, zh: "夜里", en: "AFTER DARK" },
+];
+const ANY_HOUR = { zh: "不定", en: "NO FIXED HOUR" };
+
+const WHAT: Word[] = [
+  { zh: "图文", en: "STILLS", test: (data) => bandShare(data.media, "图文") >= 0.3 },
+  { zh: "长镜", en: "LONG TAKES", test: (data) => bandShare(data.durations, "10 分钟以上") >= 0.2 },
+  { zh: "碎片", en: "FRAGMENTS", test: (data) => bandShare(data.durations, "< 1 分钟") >= 0.5 },
+  { zh: "同一题", en: "ONE SUBJECT", test: (data) => (data.topTopic?.share ?? 0) >= 0.15 },
+  { zh: "四面八方", en: "ALL DIRECTIONS", test: (data) => data.topicsCount >= 30 },
+];
+const ANY_CONTENT = { zh: "寻常", en: "THE ORDINARY" };
+
+const HOW: Word[] = [
+  { zh: "留到结尾", en: "TO THE END", test: (data) => (data.progress?.done ?? 0) >= 0.5 },
+  { zh: "留一份", en: "KEPT A COPY", test: (data) => share(data.counts.favorite, data.unique) >= 0.08 },
+  { zh: "留个记号", en: "A MARK LEFT", test: (data) => share(data.counts.liked, data.unique) >= 0.25 },
+  { zh: "递给朋友", en: "PASSED ALONG", test: (data) => (data.chat?.forms.find((form) => form.code === "share")?.count ?? 0) >= 20 },
+];
+const ANY_HABIT = { zh: "不作停留", en: "PASSING THROUGH" };
+
+function share(part: number, whole: number): number { return whole > 0 ? part / whole : 0; }
+function bandShare(bands: Array<{ label: string; share: number }> | null, label: string): number {
+  return bands?.find((band) => band.label === label)?.share ?? 0;
+}
+
+/**
+ * 组合名：看的是什么 × 看完留下什么 决定名字，时候出前缀，读作「夜行的过路客」。
+ * 这是对三个词的读法，不是对人的判断——写的是行为的样子，不评价好坏。
+ */
+const NAMES: Record<string, { name: string; english: string; reading: string }> = {
+  "图文|留到结尾": { name: "末页客", english: "THE LAST PAGE", reading: "图文没有进度条，停在哪一页全看自己。你多半一页页翻到最后一张，把最后那句话也读完，才退出来看下一条。" },
+  "图文|留一份": { name: "装订工", english: "THE BINDER", reading: "图文是存得住的东西，一张图、几行字都停在原地。看着不错的你会收下来，散开的页就这样一册册攒起来。" },
+  "图文|留个记号": { name: "折角人", english: "THE FOLDED CORNER", reading: "读到某一页，觉得说到自己了，就点一下，像把书角折过去。折过的那些页都在赞里排着，是当时觉得对的几张。" },
+  "图文|递给朋友": { name: "邮差", english: "THE POSTCARD", reading: "图文截下来就能发，一整条读完也就那么几张图。合适的那几张你转进对话框，让人接着往下看。" },
+  "图文|不作停留": { name: "翻页手", english: "TURNING PAGES", reading: "图文翻得快，一屏说一件事，看明白就往下走。你很少停下来做点什么，这一页翻过去，下一页接上。" },
+  "长镜|留到结尾": { name: "片尾常客", english: "ROLLING CREDITS", reading: "长片子你多半整段看下来，中途很少跳走，等它放完了才起身。这一年花掉的时间，大都落在这种一段一段的内容上。" },
+  "长镜|留一份": { name: "存片员", english: "THE ARCHIVIST", reading: "长的片子看得慢，中意的就收下来，放进自己那份片单。片单里排着的，多是要坐下来看上一阵的长东西。" },
+  "长镜|留个记号": { name: "按印人", english: "THE THUMBPRINT", reading: "你看的多是要花时间的片子，看的时候不怎么动手，合意的到末尾按一下赞。像在长长的一段后面摁个指印。" },
+  "长镜|递给朋友": { name: "放映师", english: "THE PROJECTIONIST", reading: "长的内容你看得多，碰上对味的第一件事是转给朋友，还捎上一句，让人家也看看。片子在你这儿放完一遍，再放给别人一遍。" },
+  "长镜|不作停留": { name: "离席者", english: "THE EMPTY SEAT", reading: "长的片子你一段一段地看，看完就走：不按赞，不收藏，也不转给谁。这一年时间花在片子上，记录里的动作不多。" },
+  "碎片|留到结尾": { name: "末帧人", english: "THE FULL CLIP", reading: "东西不长，你也很少中途划走，多半让它走到最后一帧再翻下一条。一天里过眼的不少，大都是从头看到尾的。" },
+  "碎片|留一份": { name: "挑拣手", english: "THE SIEVE", reading: "短片一条完了接下一条，你伸手拦下的不少：看对眼的就收进自己的柜子。柜子里攒的，多是这么从一长串里拿下来的。" },
+  "碎片|留个记号": { name: "盖章员", english: "THE QUICK STAMP", reading: "你翻得快，手也跟着快，看中的按一下就过，不多停也不多说。一路刷下来，那些短东西上留了一串连着的戳。" },
+  "碎片|递给朋友": { name: "传阅者", english: "HAND TO HAND", reading: "有意思的东西在你这儿停不久，看完随手就发进对话框。一年里不少条是这么从你手里过去的，短东西传得也快。" },
+  "碎片|不作停留": { name: "过路客", english: "THE UNSIGNED VISIT", reading: "内容一路往下滑，你看完就翻下一条，很少回头再点个什么。这一年从眼前过去的东西不少，动手的次数不多。" },
+  "同一题|留到结尾": { name: "追更客", english: "STRAIGHT THROUGH", reading: "你总回到同一路题材，也很少中途走开：一条看完再接一条，像追一部没完的连载，每次都追到那一集的末尾。" },
+  "同一题|留一份": { name: "抄书匠", english: "THE COPYIST", reading: "你在同一路东西里来回挑，碰上对的就存一份，像把喜欢的篇目一页页抄进自己的本子。本子翻开，前后都是一路的东西。" },
+  "同一题|留个记号": { name: "结绳人", english: "THE KNOTTED CORD", reading: "你看的多是同一类，看过按一下，算给自己记一笔。不特意存着，也不多说什么，一路按下来的那些，前后都在一条线上。" },
+  "同一题|递给朋友": { name: "牵线手", english: "WORD OF MOUTH", reading: "同一路内容你看得熟，碰上合适的就转出去；想起哪个朋友，就把那条送过去。来回几次，你常看的那一路也走到了别人那儿。" },
+  "同一题|不作停留": { name: "巡线员", english: "THE SAME LINE", reading: "你走的差不多是同一条线，题材反复落在一处；看过之后不按不存，多数也没到结尾。路是熟路，看完就接着走下一条。" },
+  "四面八方|留到结尾": { name: "逛展者", english: "WALKS EVERY ROOM", reading: "你什么都点开，题材换来换去，但很少中途退出：一条看到完才松手。像在展厅里挨个房间走，每间都走到头，再拐进一间完全不相干的。" },
+  "四面八方|留一份": { name: "收纳手", english: "THE ODD SHELF", reading: "你看的东西五花八门，遇上顺眼的就存起来。日子久了，收藏架上什么都放着一点，上一格和下一格常常不搭界。" },
+  "四面八方|留个记号": { name: "垒石人", english: "THE CAIRN", reading: "你几乎什么类型都进去转一圈，临走按一下。一年下来，这些赞落在互不相干的地方，像走山路时沿途垒下的一小堆一小堆石头。" },
+  "四面八方|递给朋友": { name: "二传手", english: "THE RELAY", reading: "这边刷到一条，那边就发给可能用得上的人。转出去的东西彼此毫不相干，凑在一起才看得出你都逛过哪儿。" },
+  "四面八方|不作停留": { name: "穿堂风", english: "THE CROSS BREEZE", reading: "你从一个类型穿到下一个，看过就滑走，很少回头。像屋子两头的门都开着，风从这头进、那头出，中间少有东西留在手上。" },
+  "寻常|留到结尾": { name: "打烊客", english: "CLOSING TIME", reading: "你看的多是寻常东西，题材上没有明显偏向；可既然点开了，就一路看到最后，像店里最后走的那位客人，等灯灭了才起身。" },
+  "寻常|留一份": { name: "压箱手", english: "THE BOTTOM DRAWER", reading: "你看的都是寻常内容，看着往后用得上的就存下来。存下的多是当时想着还会再翻一翻的那种，先压在箱底。" },
+  "寻常|留个记号": { name: "点头人", english: "THE QUIET NOD", reading: "你看的东西说不上偏爱哪一类，寻常内容居多。看完不多说什么，按一下就过去了，像迎面走过时点了个头，算应过一声。" },
+  "寻常|递给朋友": { name: "货郎", english: "DOOR TO DOOR", reading: "你看的都是寻常内容，可看着看着会想起某个人，就把它发过去。发出去那一下，更像顺手打个招呼。" },
+  "寻常|不作停留": { name: "空手客", english: "TOOK NOTHING HOME", reading: "寻常内容一条接着一条过去，你很少停下来做点什么，看完就翻下一条。这一年看过的东西不少，手上一直是空的。" },
+};
+
+const PREFIXES: Record<string, { prefix: string; opening: string }> = {
+  "凌晨": { prefix: "夜半", opening: "这一年大半的时候都在零点以后，屋里灯已经关了，只剩屏幕这点亮。" },
+  "清晨": { prefix: "清早", opening: "这一年常常从天刚亮时开始，你醒了还没起身，先看上一会儿。" },
+  "上午": { prefix: "上午", opening: "这一年主要落在上午，一天的事刚起头，你在两件事之间腾出几分钟。" },
+  "正午": { prefix: "午间", opening: "这一年多集中在正午前后，饭在手边，你在这段空当里翻上一阵。" },
+  "午后": { prefix: "午后", opening: "这一年大都在午后展开，光斜过桌面，你把一天里最松快的一段留在这儿。" },
+  "傍晚": { prefix: "日落", opening: "这一年多半在天黑前后，路灯刚亮，一天的事收了尾，你才腾出手。" },
+  "夜里": { prefix: "夜行", opening: "这一年的多数时候在夜里，等家里安静下来，你才打开来看。" },
+  "不定": { prefix: "不定时", opening: "这一年没有固定的钟点，你什么时候都可能打开，白天有，深夜也有。" },
+};
+
+/** The lists the name table has to cover, in display order. Exported for the coverage check. */
+export const SIGNATURE_WORDS = {
+  when: [...WHEN.map((item) => item.zh), ANY_HOUR.zh],
+  what: [...WHAT.map((item) => item.zh), ANY_CONTENT.zh],
+  how: [...HOW.map((item) => item.zh), ANY_HABIT.zh],
+};
+
+export function signatureName(when: string, what: string, how: string): { name: string; english: string; reading: string } {
+  const named = NAMES[`${what}|${how}`];
+  const stamp = PREFIXES[when];
+  if (!named || !stamp) return { name: "无名的一卷", english: "UNNAMED VOLUME", reading: "这一年的记录还认不出一个名字来。" };
+  return { name: `${stamp.prefix}的${named.name}`, english: named.english, reading: `${stamp.opening}${named.reading}` };
+}
+
+export function storySignature(data: Signed): StoryData["profile"] {
+  const hour = data.peakHour;
+  const when = (hour === null ? null : WHEN.filter((item) => hour >= item.from).pop()) ?? ANY_HOUR;
+  const what = WHAT.find((item) => item.test(data)) ?? ANY_CONTENT;
+  const how = HOW.find((item) => item.test(data)) ?? ANY_HABIT;
+  const named = signatureName(when.zh, what.zh, how.zh);
+  return {
+    title: `${when.zh} · ${what.zh} · ${how.zh}`,
+    english: `${when.en} · ${what.en} · ${how.en}`,
+    name: named.name,
+    nameEnglish: named.english,
+    reading: named.reading,
   };
 }
 
