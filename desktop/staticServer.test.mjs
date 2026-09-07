@@ -45,6 +45,16 @@ describe("desktop static server", () => {
     const missingAsset = await fetch(`${runtime.url}/assets/missing.js`);
     expect(missingAsset.status).toBe(404);
   });
+
+  it.each(["/", "/annual/2025"])("allows authenticated video blobs on the app page at %s", async (pathname) => {
+    const runtime = await startStaticServer({ rootDirectory: await fixture() });
+    runtimes.push(runtime);
+
+    const response = await fetch(`${runtime.url}${pathname}`, { headers: { Accept: "text/html" } });
+    const directives = response.headers.get("content-security-policy").split(";").map((value) => value.trim().split(/\s+/u));
+    expect(directives.find(([name]) => name === "media-src")).toContain("blob:");
+    expect(directives.find(([name]) => name === "script-src")).not.toContain("blob:");
+  });
 });
 
 describe("story pages", () => {

@@ -153,11 +153,53 @@ describe("downloadMediaFile", () => {
     expect(second.skipped).toBe(true);
     expect(firstFetch).toHaveBeenCalledTimes(1);
   });
+
+  it("accepts the binary WebM signature without stripping its high bits", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "douyin-video-download-"));
+    temporaryDirectories.push(directory);
+    // EBML header declaring the WebM document type.
+    const webm = Buffer.from("1a45dfa39f4286810142f7810142f2810442f381084282847765626d4287810242858102", "hex");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(webm, {
+      status: 200,
+      headers: { "Content-Type": "video/webm" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const args = {
+      context: { cookies: vi.fn().mockResolvedValue([]) },
+      media: { url: "https://p3.douyinvod.com/video.webm" },
+      outputDirectory: directory,
+      fileName: "示例视频-456.mp4",
+    };
+    const first = await downloadMediaFile(args);
+    await expect(readFile(first.filePath)).resolves.toEqual(webm);
+    expect((await downloadMediaFile(args)).skipped).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("makeVideoFileName", () => {
   it("removes path separators and keeps a deterministic fallback", () => {
     expect(makeVideoFileName({ title: " a/b:c ", videoId: "123" })).toBe("a_b_c-123.mp4");
     expect(makeVideoFileName({ title: "", sourceUrl: "https://v.douyin.com/x" })).toMatch(/^抖音视频-[a-f0-9]{10}\.mp4$/u);
+  });
+
+  it("keeps Unicode characters intact when the title reaches the filename limit", () => {
+    const atLimit = makeVideoFileName({ title: `${"a".repeat(88)}😀`, videoId: "123" });
+    const beyondLimit = makeVideoFileName({ title: `${"a".repeat(89)}😀`, videoId: "123" });
+    expect(atLimit).toBe(`${"a".repeat(88)}😀-123.mp4`);
+    expect(beyondLimit).toBe(`${"a".repeat(89)}-123.mp4`);
+    expect(() => encodeURIComponent(beyondLimit)).not.toThrow();
+  });
+
+  it("keeps non-BMP letters intact when limiting a video identifier", () => {
+    const fileName = makeVideoFileName({ title: "示例", videoId: `${"a".repeat(39)}𠀀` });
+    expect(fileName).toBe(`示例-${"a".repeat(39)}.mp4`);
+    expect(() => encodeURIComponent(fileName)).not.toThrow();
+  });
+
+  it("repairs malformed Unicode before a filename is used in a response header", () => {
+    const fileName = makeVideoFileName({ title: "示例\uD83D", videoId: "123" });
+    expect(fileName).toBe("示例\uFFFD-123.mp4");
+    expect(() => encodeURIComponent(fileName)).not.toThrow();
   });
 });
