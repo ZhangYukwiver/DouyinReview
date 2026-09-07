@@ -1,9 +1,11 @@
 import React from "react";
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text as RNText,
+  type LayoutChangeEvent,
   type TextProps,
   View,
   type ViewStyle,
@@ -22,6 +24,7 @@ import {
 } from "./ReportWorkspace";
 import { alpha, workspaceColors as color, workspaceFonts as font, workspaceRadii as radius } from "./workspaceTheme";
 import { fx, polylineLength, useCountUp, useDraw, useInView } from "./motion";
+import { layoutReportTiles, reportColumnCount, reportTrailingGaps, REPORT_TILE_GAP } from "./reportLayout";
 
 export interface ReportDashboardProps {
   mobile: boolean;
@@ -43,8 +46,7 @@ const sliceColors = color.slices;
 
 /**
  * 持续报告：与故事页（ReportWorkspace 十二章）同源的一屏读数。
- * 版式是错位便当盒：瀑布流分列，格子按估高塞进最矮的一列，首尾相接不留空行。
- * 每格只做一件事、只用一种图形，高度不齐正是层次来源。
+ * 卡片按实际内容高度排入最短的一列，后续卡片向上补位，保持固定间距。
  */
 export function ReportDashboard({ mobile, model, onOpenRecord, privacy, width }: ReportDashboardProps) {
   const observed = model.total + model.chat;
@@ -53,32 +55,28 @@ export function ReportDashboard({ mobile, model, onOpenRecord, privacy, width }:
   const share = (test: (value: number) => boolean) => (pcts.length ? pcts.filter(test).length / pcts.length * 100 : null);
   const recent = [...new Map(model.recent.map((item) => [`${item.title}:${item.time}`, item])).values()].slice(0, 6);
 
-  const [measured, setMeasured] = React.useState<Record<string, number>>({});
-  const board = width - (mobile ? 24 : 40);
-  const units = mobile || board < 620 ? 1 : board < 860 ? 12 : board < 1140 ? 16 : 24;
-  const unit = (board - GAP * (units - 1)) / units;
   const tiles: Tile[] = [
-    { key: "days", w: 6, h: 108, node: (
+    { key: "days", h: 108, node: (
       <Cardlet en="ACTIVE DAYS" key="days" title="活跃天数">
         <Figure sub="/ 365" value={model.activeDays || "—"} />
       </Cardlet>
     ) },
-    { key: "events", w: 7, h: 108, node: (
+    { key: "events", h: 108, node: (
       <Cardlet en="EVENTS" key="events" title="观测事件">
         <Figure sub="observed" value={observed || "—"} />
       </Cardlet>
     ) },
-    { key: "unique", w: 5, h: 108, node: (
+    { key: "unique", h: 108, node: (
       <Cardlet en="UNIQUE" key="unique" title="去重内容">
         <Figure sub="unique" value={model.unique || "—"} />
       </Cardlet>
     ) },
-    { key: "attention", w: 6, h: 108, node: (
+    { key: "attention", h: 108, node: (
       <Cardlet en="ATTENTION" key="attention" title="总注意力">
         <Figure sub={model.watch ? `${model.watch.toLocaleString("zh-CN")} 条观看` : "observed"} value={attentionLabel(model.attentionSeconds)} />
       </Cardlet>
     ) },
-    { key: "heat", w: 11, h: 268, node: (
+    { key: "heat", h: 268, node: (
       <Cardlet
         en="WEEK × HOUR"
         foot={rhythmPattern(model)}
@@ -89,17 +87,17 @@ export function ReportDashboard({ mobile, model, onOpenRecord, privacy, width }:
         <HeatGrid heatmap={model.heatmap} />
       </Cardlet>
     ) },
-    { key: "hours", w: 8, h: 186, node: (
+    { key: "hours", h: 186, node: (
       <Cardlet en="HOURS" key="hours" meta={model.peakHour === null ? "—" : `${pad(model.peakHour)}:00 峰值`} title="一天的曲线">
         <HourCurve peak={model.peakHour} values={model.hours} />
       </Cardlet>
     ) },
-    { key: "completion", w: 5, h: 228, node: (
+    { key: "completion", h: 228, node: (
       <Cardlet en="COMPLETION" key="completion" meta={`${pcts.length.toLocaleString("zh-CN")} 条进度`} title="平均完成度">
         <Ring caption={model.watch ? `重播 ${Math.round(model.replays / model.watch * 100)}%` : "等待进度"} label={pctLabel(model.completion)} value={model.completion} />
       </Cardlet>
     ) },
-    { key: "funnel", w: 9, h: 252, node: (
+    { key: "funnel", h: 252, node: (
       <Cardlet en="FUNNEL" foot={attentionPattern(model.completion)} key="funnel" meta="观看进度分档" title="停留漏斗">
         <Funnel steps={[
           { label: "开始浏览", value: pcts.length ? 100 : null },
@@ -109,67 +107,67 @@ export function ReportDashboard({ mobile, model, onOpenRecord, privacy, width }:
         ]} />
       </Cardlet>
     ) },
-    { key: "topics", w: 10, h: 262, node: (
+    { key: "topics", h: 262, node: (
       <Cardlet en="TOPICS" foot={contentPattern(model.topics)} key="topics" meta={`${model.topics.length} 个主题信号`} title="主题色块">
         <Mosaic items={model.topics.slice(0, 8).map((topic, index) => ({ label: privacy ? `话题${index + 1}` : topic.name, value: topic.count }))} />
       </Cardlet>
     ) },
-    { key: "length", w: 6, h: 244, node: (
+    { key: "length", h: 244, node: (
       <Cardlet en="LENGTH" key="length" meta="按内容时长" title="时长构成">
         <Pie slices={model.durationBands.map((band) => ({ label: band.label, sub: band.en, value: band.share ?? 0 }))} />
       </Cardlet>
     ) },
-    { key: "format", w: 4, h: 212, node: (
+    { key: "format", h: 212, node: (
       <Cardlet en="FORMAT" key="format" meta={`${model.formats.length} 种形态`} title="内容形态">
         <Pie donut slices={model.formats.slice(0, 4).map((format) => ({ label: format.name, sub: String(format.count), value: format.share }))} />
       </Cardlet>
     ) },
-    { key: "tail", w: 11, h: 258, node: (
+    { key: "tail", h: 258, node: (
       <Cardlet en="LONG TAIL" foot={creatorsPattern(model)} key="tail" meta={`${model.creatorsCount.toLocaleString("zh-CN")} 位可识别`} title="创作者长尾">
         <TailCurve head={model.creators.slice(0, 3).map((creator, index) => ({ label: privacy ? `创作者 ${index + 1}` : creator.name, value: creator.count }))} tail={model.creatorFocus.tail} />
       </Cardlet>
     ) },
-    { key: "concentration", w: 6, h: 228, node: (
+    { key: "concentration", h: 228, node: (
       <Cardlet en="CONCENTRATION" key="concentration" meta="前三位占比" title="创作者集中度">
         <Ring caption={`新面孔 ${pctLabel(model.creatorFocus.discovery)}`} label={pctLabel(model.creatorFocus.concentration)} tone={GOLD} value={model.creatorFocus.concentration} />
       </Cardlet>
     ) },
-    { key: "daynight", w: 10, h: 216, node: (
+    { key: "daynight", h: 216, node: (
       <Cardlet en="DAY & NIGHT" key="daynight" meta={`昼夜重合 ${pctLabel(model.overlap)}`} title="内容与对话">
         <DualCurve chat={model.chatHours} watch={model.hours} />
       </Cardlet>
     ) },
-    { key: "chatmix", w: 7, h: 254, node: (
+    { key: "chatmix", h: 254, node: (
       <Cardlet en="CHAT MIX" key="chatmix" meta={`${model.chat.toLocaleString("zh-CN")} 条消息`} title="消息类型">
         <Pie donut slices={model.chatKinds.slice(0, 5).map((kind) => ({ label: kind.name, sub: String(kind.count), value: kind.share }))} />
       </Cardlet>
     ) },
-    { key: "months", w: 8, h: 172, node: (
+    { key: "months", h: 172, node: (
       <Cardlet en="MONTHS" key="months" meta={model.peakMonth === null ? "月份趋势不可用" : `峰值 ${monthNames[model.peakMonth]}`} title="全年起伏">
         <MonthCurve months={model.months} peak={model.peakMonth} />
       </Cardlet>
     ) },
-    { key: "venn", w: 8, h: 288, node: (
+    { key: "venn", h: 288, node: (
       <Cardlet en="OVERLAP" key="venn" meta="三类列表交集" title="留下的内容">
         <Venn intersection={model.intersection} totals={{ favorite: model.favorite, liked: model.liked, watch: model.watch }} />
       </Cardlet>
     ) },
-    { key: "matrix", w: 9, h: 276, node: (
+    { key: "matrix", h: 276, node: (
       <Cardlet en="CORRELATION" key="matrix" meta={`${model.cross.days} 个观测日`} title="交叉矩阵">
         <Matrix labels={model.cross.labels} matrix={model.cross.matrix} />
       </Cardlet>
     ) },
-    { key: "radar", w: 6, h: 282, node: (
+    { key: "radar", h: 282, node: (
       <Cardlet en="HABIT PROFILE" key="radar" meta={model.profile} title="习惯雷达">
         <Radar axes={model.axes} />
       </Cardlet>
     ) },
-    { key: "cross", w: 8, h: 214, node: (
+    { key: "cross", h: 214, node: (
       <Cardlet en="CROSS PATTERNS" key="cross" meta="按相关性排序" title="交叉洞察">
         <InsightList items={model.cross.patterns.map((pattern) => ({ text: pattern.text, title: pattern.title }))} />
       </Cardlet>
     ) },
-    { key: "surprises", w: 10, h: 252, node: (
+    { key: "surprises", h: 252, node: (
       <Cardlet
         en="SURPRISES"
         key="surprises"
@@ -179,12 +177,12 @@ export function ReportDashboard({ mobile, model, onOpenRecord, privacy, width }:
         <InsightList items={model.surprises.map((insight) => ({ badge: insight.status, text: insight.text, title: insight.title }))} />
       </Cardlet>
     ) },
-    { key: "recent", w: 8, h: 226, node: (
+    { key: "recent", h: 226, node: (
       <Cardlet en="RECENT" key="recent" meta={`${model.events.length.toLocaleString("zh-CN")} 条事件`} title="近期事件">
         <EventList items={recent} onOpenRecord={onOpenRecord} privacy={privacy} />
       </Cardlet>
     ) },
-    { key: "boundary", w: 8, h: 178, node: (
+    { key: "boundary", h: 178, node: (
       <Cardlet en="BOUNDARY" key="boundary" meta={`${Math.round(model.reliableRatio * 100)}% 可靠时间`} title="数据边界">
         <Boundary model={model} />
       </Cardlet>
@@ -207,152 +205,351 @@ export function ReportDashboard({ mobile, model, onOpenRecord, privacy, width }:
         </View>
       ) : null}
 
-      <Board
-        onMeasure={(key, height) => setMeasured((current) => (height <= (current[key] ?? 0) + 0.5 ? current : { ...current, [key]: height }))}
-        measured={measured}
-        tiles={tiles}
-        unit={unit}
-        units={units}
-      />
+      <Board mobile={mobile} tiles={tiles} width={width - (mobile ? 24 : 40)} />
     </ScrollView>
   );
 }
 
-/* ---------- 自由排布：没有行也没有列，格子沿天际线找最高最左的空位嵌进去 ---------- */
+/* ---------- 按内容高度补位：卡片自然撑开，排布只负责位置 ---------- */
 
-const GAP = 10;
-// 纵向量化步长：格子高度取整到它的倍数，接缝才对得上、洞才补得平
-const PITCH = 28;
-// 卡片自身的上下内边距 + 边框，量到的是内容高度，要补上这一截
-const TILE_CHROME = 28;
+interface Tile { key: string; h: number; node: React.ReactNode }
 
-interface Tile { key: string; w: number; h: number; node: React.ReactNode }
-
-/**
- * 掉落排布 + 补洞 + 重试：格子先掉进最靠上的空位，剩下的洞交给邻居长过来吃掉；
- * 还有洞就换一组宽度重排，直到一个洞都不剩。宽高都跟着内容走，所以不会切到内容。
- */
-function Board({ measured, onMeasure, tiles, unit, units }: {
-  measured: Record<string, number>;
-  onMeasure: (key: string, height: number) => void;
+function Board({ mobile, tiles, width }: {
+  mobile: boolean;
   tiles: Tile[];
-  unit: number;
-  units: number;
+  width: number;
 }) {
-  let best = pack(tiles, units, measured, 0);
-  for (let variant = 1; variant < 60 && best.holes > 0; variant += 1) {
-    const next = pack(tiles, units, measured, variant);
-    if (next.holes < best.holes) best = next;
-  }
+  const [boardWidth, setBoardWidth] = React.useState(Math.max(0, width));
+  const columns = reportColumnCount(boardWidth, mobile);
+  const columnWidth = Math.max(0, (boardWidth - REPORT_TILE_GAP * (columns - 1)) / columns);
+  const [measured, setMeasured] = React.useState<{ width: number; heights: Record<string, number> }>({ width: columnWidth, heights: {} });
+  // 换行会改变内容高度；每次列宽改变都重新测量，内容变少时也允许卡片收回。
+  const heights = measured.width === columnWidth ? measured.heights : {};
+  const layout = layoutReportTiles(tiles, columns, heights);
+  // 估高阶段的空当是假的，等所有卡片量完再补，免得占位块先闪一下再跳走。
+  const settled = tiles.every((tile) => heights[tile.key] !== undefined);
+  const gapShape = settled ? buildGapShape(layout.bottoms, layout.height, columnWidth) : null;
+  const onMeasure = (key: string, event: LayoutChangeEvent) => {
+    const { height, width: actualWidth } = event.nativeEvent.layout;
+    if (height <= 0 || Math.abs(actualWidth - columnWidth) > 0.5) return;
+    setMeasured((current) => {
+      const currentHeights = current.width === columnWidth ? current.heights : {};
+      return Math.abs((currentHeights[key] ?? 0) - height) <= 0.5
+        ? current
+        : { width: columnWidth, heights: { ...currentHeights, [key]: height } };
+    });
+  };
   return (
-    <View style={[styles.board, { height: best.rows * PITCH - GAP }]}>
-      {best.placed.map(({ col, h, row, tile, w }, index) => (
+    <View
+      onLayout={(event) => setBoardWidth(event.nativeEvent.layout.width)}
+      style={[styles.board, { height: layout.height }]}
+      testID="report-board"
+    >
+      {layout.placed.map(({ column, top }, index) => (
         <BoardTile
           index={index}
-          key={tile.key}
+          key={tiles[index]!.key}
+          onLayout={(event) => onMeasure(tiles[index]!.key, event)}
+          tileKey={tiles[index]!.key}
           style={{
-            height: h * PITCH - GAP,
-            left: col * (unit + GAP),
+            left: column * (columnWidth + REPORT_TILE_GAP),
             position: "absolute",
-            top: row * PITCH,
-            width: w * unit + (w - 1) * GAP,
+            top,
+            width: columnWidth,
           }}
         >
-          {/* 键带上格宽：宽 A 的实测高不覆盖宽 B 的，打断"量高→变宽→高又变"的振荡环 */}
-          <View onLayout={(event) => onMeasure(`${tile.key}@${units}:${w}`, event.nativeEvent.layout.height)}>{tile.node}</View>
+          <View>{tiles[index]!.node}</View>
         </BoardTile>
       ))}
+      {gapShape ? <SwarmGap {...gapShape} /> : null}
     </View>
   );
 }
 
 // 格子滚到视口才上浮进场，同一批露出的按序号错开；悬停微抬。
-function BoardTile({ children, index, style }: { children: React.ReactNode; index: number; style: ViewStyle }) {
+function BoardTile({ children, index, onLayout, style, tileKey }: {
+  children: React.ReactNode;
+  index: number;
+  onLayout: (event: LayoutChangeEvent) => void;
+  style: ViewStyle;
+  tileKey: string;
+}) {
   const [ref, inView] = useInView<View>();
-  return <View {...fx({ reveal: inView, i: (index % 6) + 1, hover: "lift" })} ref={ref} style={[styles.tile, style]}>{children}</View>;
+  return <View {...fx({ reveal: inView, i: (index % 6) + 1, hover: "lift" })} onLayout={onLayout} ref={ref} style={[styles.tile, style]} testID={`report-tile-${tileKey}`}>{children}</View>;
 }
 
-interface Placed { col: number; h: number; row: number; tile: Tile; w: number }
-
-function pack(tiles: Tile[], units: number, measured: Record<string, number>, variant: number) {
-  const cells: number[][] = [];
-  const rowAt = (row: number) => {
-    while (cells.length <= row) cells.push(Array.from({ length: units }, () => -1));
-    return cells[row]!;
-  };
-  // variant 0 用原始宽度；之后按确定性伪随机把每格宽度 ±1 格，换一种咬合方式重排
-  const jitter = (index: number) => (variant === 0 ? 0 : ((Math.abs(Math.sin(variant * 37.13 + index * 11.7)) * 1000) | 0) % 3 - 1);
-  const floor = units >= 16 ? 4 : units >= 12 ? 3 : 1;
-  const placed: Placed[] = tiles.map((tile, index) => {
-    const w = Math.max(floor, Math.min(units, Math.round(tile.w * units / 24) + jitter(index)));
-    const h = Math.max(2, Math.ceil(((measured[`${tile.key}@${units}:${w}`] ?? tile.h) + TILE_CHROME + GAP) / PITCH));
-    for (let row = 0; row <= 400; row += 1) {
-      for (let col = 0; col + w <= units; col += 1) {
-        let free = true;
-        for (let r = row; r < row + h && free; r += 1) for (let c = col; c < col + w; c += 1) if (rowAt(r)[c]! >= 0) { free = false; break; }
-        if (!free) continue;
-        for (let r = row; r < row + h; r += 1) for (let c = col; c < col + w; c += 1) rowAt(r)[c] = index;
-        return { col, h, row, tile, w };
-      }
-    }
-    return { col: 0, h, row: cells.length, tile, w };
+/**
+ * 瀑布流末尾各列高度不齐，剩下的整片空当拼成一块「天际线」形状的卡片：
+ * 上沿在每两列之间换台阶，底边和整块齐平，四周圆角，背景边框跟其它卡片一样。
+ * 中间万一有一列刚好排满，也留 24px 的脖子，保证是连着的一整块而不是断成两坨。
+ */
+function buildGapShape(bottoms: ReadonlyArray<number>, height: number, columnWidth: number) {
+  const gaps = reportTrailingGaps(bottoms, height, 40);
+  if (!gaps.length || Math.max(...gaps.map((gap) => gap.height)) < 90) return null;
+  const from = gaps[0]!.column;
+  const to = gaps[gaps.length - 1]!.column;
+  const spanLeft = (column: number) => column * (columnWidth + REPORT_TILE_GAP);
+  const left = spanLeft(from);
+  const right = spanLeft(to) + columnWidth;
+  const tops: number[] = [];
+  for (let column = from; column <= to; column += 1) tops.push(Math.min(bottoms[column]!, height - 24));
+  const top = Math.min(...tops);
+  const points: Array<[number, number]> = [];
+  tops.forEach((value, index) => {
+    const column = from + index;
+    const x0 = index === 0 ? left : spanLeft(column) - REPORT_TILE_GAP / 2;
+    const x1 = index === tops.length - 1 ? right : spanLeft(column) + columnWidth + REPORT_TILE_GAP / 2;
+    points.push([x0 - left, value - top], [x1 - left, value - top]);
   });
+  points.push([right - left, height - top], [0, height - top]);
+  return { height: height - top, left, path: roundedPath(points, 14), top, width: right - left };
+}
 
-  const rows = cells.length;
-  const spanFree = (row: number, col: number, count: number) => {
-    for (let c = col; c < col + count; c += 1) if (c >= units || rowAt(row)[c]! >= 0) return false;
-    return true;
+/** 多边形描边成带圆角的路径：每个拐角的半径缩到相邻两条边的一半以内，台阶再矮也不会画穿。 */
+function roundedPath(points: ReadonlyArray<[number, number]>, radius: number): string {
+  const shape = points.filter((point, index) => {
+    const previous = points[(index + points.length - 1) % points.length]!;
+    return Math.hypot(point[0] - previous[0], point[1] - previous[1]) > 0.5;
+  });
+  if (shape.length < 3) return "";
+  const toward = (from: [number, number], to: [number, number], distance: number): [number, number] => {
+    const length = Math.hypot(to[0] - from[0], to[1] - from[1]) || 1;
+    return [from[0] + (to[0] - from[0]) * distance / length, from[1] + (to[1] - from[1]) * distance / length];
   };
-  const stripFree = (col: number, row: number, count: number) => {
-    for (let r = row; r < row + count; r += 1) if (r >= rows || rowAt(r)[col]! >= 0) return false;
-    return true;
-  };
-  for (let pass = 0; pass < 40; pass += 1) {
-    let changed = false;
-    for (let row = 0; row < rows; row += 1) {
-      for (let col = 0; col < units; col += 1) {
-        if (rowAt(row)[col]! >= 0) continue;
-        const up = row > 0 ? rowAt(row - 1)[col]! : -1;
-        const upTile = up >= 0 ? placed[up]! : null;
-        if (upTile && upTile.row + upTile.h === row && spanFree(row, upTile.col, upTile.w)) {
-          for (let c = upTile.col; c < upTile.col + upTile.w; c += 1) rowAt(row)[c] = up;
-          upTile.h += 1;
-          changed = true;
-          continue;
-        }
-        const leftIndex = col > 0 ? rowAt(row)[col - 1]! : -1;
-        const leftTile = leftIndex >= 0 ? placed[leftIndex]! : null;
-        if (leftTile && leftTile.col + leftTile.w === col && stripFree(col, leftTile.row, leftTile.h)) {
-          for (let r = leftTile.row; r < leftTile.row + leftTile.h; r += 1) rowAt(r)[col] = leftIndex;
-          leftTile.w += 1;
-          changed = true;
-          continue;
-        }
-        const rightIndex = col + 1 < units ? rowAt(row)[col + 1]! : -1;
-        const rightTile = rightIndex >= 0 ? placed[rightIndex]! : null;
-        if (rightTile && rightTile.col === col + 1 && stripFree(col, rightTile.row, rightTile.h)) {
-          for (let r = rightTile.row; r < rightTile.row + rightTile.h; r += 1) rowAt(r)[col] = rightIndex;
-          rightTile.col -= 1;
-          rightTile.w += 1;
-          changed = true;
-          continue;
-        }
-        const downIndex = row + 1 < rows ? rowAt(row + 1)[col]! : -1;
-        const downTile = downIndex >= 0 ? placed[downIndex]! : null;
-        if (downTile && downTile.row === row + 1 && spanFree(row, downTile.col, downTile.w)) {
-          for (let c = downTile.col; c < downTile.col + downTile.w; c += 1) rowAt(row)[c] = downIndex;
-          downTile.row -= 1;
-          downTile.h += 1;
-          changed = true;
-        }
-      }
+  const parts: string[] = [];
+  shape.forEach((corner, index) => {
+    const previous = shape[(index + shape.length - 1) % shape.length]!;
+    const next = shape[(index + 1) % shape.length]!;
+    const limit = Math.min(
+      radius,
+      Math.hypot(corner[0] - previous[0], corner[1] - previous[1]) / 2,
+      Math.hypot(next[0] - corner[0], next[1] - corner[1]) / 2,
+    );
+    const enter = toward(corner, previous, limit);
+    const exit = toward(corner, next, limit);
+    parts.push(`${index === 0 ? "M" : "L"}${enter[0].toFixed(1)} ${enter[1].toFixed(1)}`);
+    parts.push(`Q${corner[0].toFixed(1)} ${corner[1].toFixed(1)} ${exit[0].toFixed(1)} ${exit[1].toFixed(1)}`);
+  });
+  return `${parts.join(" ")} Z`;
+}
+
+function SwarmGap({ height, left, path, top, width }: { height: number; left: number; path: string; top: number; width: number }) {
+  const paper = React.useRef<View | null>(null);
+  React.useEffect(() => {
+    const node = paper.current as unknown as HTMLElement | null;
+    // clip-path 把背景、群点和点击热区一起裁成天际线的形状。
+    if (node?.style) node.style.clipPath = `path("${path}")`;
+  }, [path]);
+  useSwarm(paper);
+  return (
+    <View pointerEvents="box-none" style={{ height, left, position: "absolute", top, width }} testID="report-tile-swarm">
+      <View ref={paper} style={[styles.swarmPaper, { height, width }]}>
+        <Text style={styles.swarmHint}>点一下会散开</Text>
+      </View>
+      <Svg height={height} pointerEvents="none" style={StyleSheet.absoluteFill} width={width}>
+        <Path d={path} fill="none" stroke={color.border} strokeWidth={1} />
+      </Svg>
+    </View>
+  );
+}
+
+/**
+ * 照搬 reactbits 的 swarm cursor：一群会互相融成一坨的光点绕着指针转，点一下炸开再聚回来。
+ * 原版是 ogl 两趟 WebGL——先把每个点和拖尾按高斯核累加成场，再用 smoothstep 卡出实心和辉光。
+ * 这里同样两趟，但用 canvas：场画在离屏画布上，主画布用 lighter 叠几遍把场"卡"成实心边缘
+ * （叠 n 遍等于 alpha×n 截顶，就是一次软阈值），再补一层模糊当辉光，最后 source-in 上色。
+ * 不引依赖。native 不跑。
+ */
+function useSwarm(ref: React.RefObject<View | null>): void {
+  React.useEffect(() => {
+    const node = ref.current as unknown as HTMLElement | null;
+    if (Platform.OS !== "web" || !node || typeof window === "undefined") return undefined;
+    const canvas = document.createElement("canvas");
+    canvas.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%";
+    node.appendChild(canvas);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      node.removeChild(canvas);
+      return undefined;
     }
-    if (!changed) break;
-  }
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const TRAIL = 18;
+    // 高斯核画成一张贴图，每帧只 drawImage，不反复建渐变
+    const blob = document.createElement("canvas");
+    blob.width = 160;
+    blob.height = 160;
+    const blobCtx = blob.getContext("2d")!;
+    const kernel = blobCtx.createRadialGradient(80, 80, 0, 80, 80, 80);
+    for (let stop = 0; stop <= 40; stop += 1) kernel.addColorStop(stop / 40, `rgba(255,255,255,${Math.exp(-((stop / 40) ** 2) * 3.6).toFixed(4)})`);
+    blobCtx.fillStyle = kernel;
+    blobCtx.fillRect(0, 0, 160, 160);
+    const field = document.createElement("canvas");
+    const fieldCtx = field.getContext("2d")!;
+    const dots = Array.from({ length: 10 }, () => ({
+      x: 0, y: 0, vx: 0, vy: 0,
+      phase: Math.random() * Math.PI * 2,
+      hand: Math.random() < 0.5 ? -1 : 1,
+      agility: 0.75 + Math.random() * 0.5,
+      past: [] as Array<[number, number]>,
+    }));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let boxWidth = 1;
+    let boxHeight = 1;
+    let edgeColor = "#9ab";
+    let coreColor = "#456";
+    let styleKey = "";
+    const readColors = () => {
+      const computed = window.getComputedStyle(node);
+      edgeColor = computed.getPropertyValue("--ws-cyan").trim() || edgeColor;
+      coreColor = computed.getPropertyValue("--ws-accent").trim() || coreColor;
+      styleKey = document.documentElement.dataset.style ?? "";
+    };
+    const resize = () => {
+      boxWidth = node.clientWidth || 1;
+      boxHeight = node.clientHeight || 1;
+      canvas.width = Math.round(boxWidth * dpr);
+      canvas.height = Math.round(boxHeight * dpr);
+      field.width = canvas.width;
+      field.height = canvas.height;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      fieldCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    const observer = new ResizeObserver(resize);
+    observer.observe(node);
+    resize();
+    readColors();
+    for (const dot of dots) {
+      const angle = Math.random() * Math.PI * 2;
+      dot.x = boxWidth / 2 + Math.cos(angle) * 40;
+      dot.y = boxHeight / 2 + Math.sin(angle) * 40;
+    }
+    const cursor = { x: boxWidth / 2, y: boxHeight / 2, inside: false };
+    let burst = 0;
+    const move = (event: PointerEvent) => {
+      const box = node.getBoundingClientRect();
+      cursor.x = event.clientX - box.left;
+      cursor.y = event.clientY - box.top;
+      cursor.inside = true;
+    };
+    const leave = () => { cursor.inside = false; };
+    const down = (event: PointerEvent) => { move(event); burst = 1; };
+    node.addEventListener("pointermove", move, { passive: true });
+    node.addEventListener("pointerenter", move, { passive: true });
+    node.addEventListener("pointerleave", leave);
+    node.addEventListener("pointerdown", down);
 
-  let holes = 0;
-  for (let row = 0; row < rows; row += 1) for (let col = 0; col < units; col += 1) if (rowAt(row)[col]! < 0) holes += 1;
-  return { holes, placed, rows: cells.length };
+    let frame = 0;
+    let last = performance.now();
+    const step = (now: number) => {
+      frame = requestAnimationFrame(step);
+      const delta = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      if (document.documentElement.dataset.style !== styleKey) readColors();
+      const anchorX = cursor.inside ? cursor.x : boxWidth / 2;
+      const anchorY = cursor.inside ? cursor.y : boxHeight / 2;
+      const seconds = now / 1000;
+      burst = Math.max(0, burst - delta / 0.55);
+      const band = Math.max(28, Math.min(boxWidth, boxHeight) * 0.32);
+      const maxSpeed = 150 + band * 1.6;
+      const apart = band * 0.78;
+      if (!still) for (const [index, dot] of dots.entries()) {
+        const dx = anchorX - dot.x;
+        const dy = anchorY - dot.y;
+        const distance = Math.hypot(dx, dy) || 1e-4;
+        const ux = dx / distance;
+        const uy = dy / distance;
+        // 环绕半径慢慢呼吸，各点相位错开，看起来像一群而不是一圈
+        const orbit = band * (0.42 + 0.46 * (Math.sin(seconds * 0.6 + dot.phase) * 0.5 + 0.5));
+        const radial = Math.max(-1, Math.min(1, (distance - orbit) / (band * 0.85)));
+        const swirl = Math.sqrt(Math.max(0, 1 - radial * radial)) * dot.hand;
+        let wishX = ux * radial - uy * swirl;
+        let wishY = uy * radial + ux * swirl;
+        const wish = Math.hypot(wishX, wishY) || 1e-4;
+        wishX /= wish;
+        wishY /= wish;
+        const rate = 5.5 * dot.agility * (1 - burst);
+        let ax = (wishX * maxSpeed - dot.vx) * rate;
+        let ay = (wishY * maxSpeed - dot.vy) * rate;
+        if (burst > 0.001) {
+          ax -= ux * maxSpeed * burst * 6;
+          ay -= uy * maxSpeed * burst * 6;
+        }
+        for (const [other, mate] of dots.entries()) {
+          if (other === index) continue;
+          const sx = dot.x - mate.x;
+          const sy = dot.y - mate.y;
+          const gap = Math.hypot(sx, sy);
+          if (gap > 1e-3 && gap < apart) {
+            const push = (1 - gap / apart) * maxSpeed * 2.2;
+            ax += (sx / gap) * push;
+            ay += (sy / gap) * push;
+          }
+        }
+        dot.vx += ax * delta;
+        dot.vy += ay * delta;
+        const speed = Math.hypot(dot.vx, dot.vy) || 1e-4;
+        const ceiling = maxSpeed * (1 + burst * 3);
+        const floor = maxSpeed * 0.3;
+        const clamped = Math.max(floor, Math.min(ceiling, speed));
+        dot.vx = (dot.vx / speed) * clamped;
+        dot.vy = (dot.vy / speed) * clamped;
+        dot.x += dot.vx * delta;
+        dot.y += dot.vy * delta;
+        dot.past.push([dot.x, dot.y]);
+        if (dot.past.length > TRAIL) dot.past.shift();
+      }
+      // 第一趟：把每个点和它的拖尾按高斯核加成一张场
+      const head = Math.max(9, Math.min(15, band * 0.19));
+      fieldCtx.clearRect(0, 0, boxWidth, boxHeight);
+      fieldCtx.globalCompositeOperation = "lighter";
+      let sumX = 0;
+      let sumY = 0;
+      for (const dot of dots) {
+        sumX += dot.x;
+        sumY += dot.y;
+        for (const [index, [x, y]] of dot.past.entries()) {
+          const ratio = (index + 1) / dot.past.length;
+          const radius = head * (0.22 + 0.6 * ratio);
+          fieldCtx.globalAlpha = 0.08 + 0.42 * ratio ** 2;
+          fieldCtx.drawImage(blob, x - radius, y - radius, radius * 2, radius * 2);
+        }
+        fieldCtx.globalAlpha = 1;
+        fieldCtx.drawImage(blob, dot.x - head, dot.y - head, head * 2, head * 2);
+      }
+      fieldCtx.globalAlpha = 1;
+      // 第二趟：叠 4 遍卡出实心（软阈值），再补一层模糊当辉光，最后只给形状上色
+      ctx.clearRect(0, 0, boxWidth, boxHeight);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.filter = "blur(1.5px)";
+      for (let pass = 0; pass < 3; pass += 1) ctx.drawImage(field, 0, 0, boxWidth, boxHeight);
+      ctx.filter = `blur(${Math.max(3, Math.round(head * 0.5))}px)`;
+      ctx.globalAlpha = 0.45;
+      ctx.drawImage(field, 0, 0, boxWidth, boxHeight);
+      ctx.filter = "none";
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-in";
+      const cx = sumX / dots.length;
+      const cy = sumY / dots.length;
+      const tint = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(24, band * 1.6));
+      tint.addColorStop(0, coreColor);
+      tint.addColorStop(1, edgeColor);
+      ctx.globalAlpha = 0.78;
+      ctx.fillStyle = tint;
+      ctx.fillRect(0, 0, boxWidth, boxHeight);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+    };
+    frame = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      node.removeEventListener("pointermove", move);
+      node.removeEventListener("pointerenter", move);
+      node.removeEventListener("pointerleave", leave);
+      node.removeEventListener("pointerdown", down);
+      canvas.remove();
+    };
+  }, [ref]);
 }
 
 function Cardlet({ children, en, foot, meta, title }: {
@@ -561,7 +758,7 @@ function Mosaic({ items }: { items: Array<{ label: string; value: number }> }) {
                   borderColor: item.value === max ? GOLD : color.border,
                 }]}
               >
-                <Text numberOfLines={1} style={styles.mosaicLabel}>{item.label}</Text>
+                <Text style={styles.mosaicLabel}>{item.label}</Text>
                 <Text style={styles.mosaicValue}>{item.value}</Text>
               </View>
             );
@@ -681,9 +878,10 @@ function MonthCurve({ months, peak }: { months: number[]; peak: number | null })
 /** 三类列表的交集韦恩图。 */
 function Venn({ intersection, totals }: { intersection: ReportModel["intersection"]; totals: { favorite: number; liked: number; watch: number } }) {
   const circles = [
-    { cx: 100, cy: 52, label: "观看", tone: color.vennWatch, total: totals.watch, tx: 100, ty: 18 },
-    { cx: 74, cy: 96, label: "喜欢", tone: GOLD, total: totals.liked, tx: 34, ty: 126 },
-    { cx: 126, cy: 96, label: "收藏", tone: color.vennFavorite, total: totals.favorite, tx: 166, ty: 126 },
+    // 标签放在各自圆的独占月牙里（r=42，与另两圆无交叠），别落到圆外
+    { cx: 100, cy: 52, label: "观看", tone: color.vennWatch, total: totals.watch, tx: 100, ty: 32 },
+    { cx: 74, cy: 96, label: "喜欢", tone: GOLD, total: totals.liked, tx: 56, ty: 118 },
+    { cx: 126, cy: 96, label: "收藏", tone: color.vennFavorite, total: totals.favorite, tx: 144, ty: 118 },
   ];
   return (
     <View>
@@ -868,6 +1066,8 @@ const styles = StyleSheet.create({
   coverageText: { flex: 1, color: color.textSecondary, fontSize: 10.5, lineHeight: 17 },
 
   board: { position: "relative", marginTop: 12 },
+  swarmPaper: { position: "relative", overflow: "hidden", backgroundColor: color.surface, cursor: "pointer" } as ViewStyle,
+  swarmHint: { position: "absolute", right: 15, bottom: 13, color: color.textMuted, fontSize: 9, letterSpacing: 1, opacity: 0.7 },
   tile: { minWidth: 0, overflow: "hidden", paddingHorizontal: 13, paddingVertical: 13, borderWidth: 1, borderColor: color.border, borderRadius: radius.large, backgroundColor: color.surface, boxShadow: color.shadow },
   tileHead: { flexDirection: "row", alignItems: "baseline", flexWrap: "wrap", gap: 8 },
   tileTitle: { flexShrink: 0, color: color.text, fontSize: 15, fontWeight: "600", letterSpacing: 2.5, fontFamily: font.serif },
