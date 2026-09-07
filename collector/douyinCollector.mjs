@@ -954,6 +954,7 @@ export class DouyinCollector {
       progress: null,
       updatedAt: null,
       browserOpen: false,
+      code: null,
     };
   }
 
@@ -972,6 +973,8 @@ export class DouyinCollector {
   }
 
   updateStatus(patch) {
+    // 错误码只跟着 error 状态走，进入其他状态时清掉，别让上一次的错误码留在新状态里
+    if (patch.state && patch.state !== "error") patch = { code: null, ...patch };
     this.status = { ...this.status, ...patch };
     this.statusRevision += 1;
   }
@@ -1227,6 +1230,7 @@ export class DouyinCollector {
         if (error instanceof CollectorCancelledError || runId !== this.syncRunId) return;
         this.updateStatus({
           state: "error",
+          code: error?.code ?? null,
           phase: null,
           progress: null,
           message: safeMessage(error, mode === "direct_records"
@@ -1310,6 +1314,7 @@ export class DouyinCollector {
         if (error instanceof CollectorCancelledError || !observation.active || runId !== this.syncRunId) return;
         this.updateStatus({
           state: "error",
+          code: error?.code ?? null,
           phase: null,
           progress: null,
           message: safeMessage(error, mode === "chat" ? "聊天读取启动失败，请稍后重试。" : "手动监听启动失败，请关闭浏览器后重试。"),

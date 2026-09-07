@@ -6,6 +6,7 @@ import {
   getCollectorPairingCode,
   getCollectorRecords,
   LocalCollectorError,
+  loadCollectorVideo,
   getCollectorStatus,
   getCollectorVideoDownload,
   normalizeCollectorBaseUrl,
@@ -23,6 +24,92 @@ import {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+describe("video playback loading", () => {
+  const baseUrl = "http://127.0.0.1:4765";
+  const job = {
+    id: "12345678-1234-1234-1234-123456789abc",
+    sourceUrl: "https://www.douyin.com/video/1234567890",
+    status: "queued",
+    createdAt: "2026-09-06T00:00:00.000Z",
+  };
+  const jobResponse = (status: string, extra = {}) => new Response(JSON.stringify({ job: { ...job, status, ...extra } }));
+
+  it("waits for media preparation and returns playable bytes with header-only authentication", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jobResponse("queued"))
+      .mockResolvedValueOnce(jobResponse("running"))
+      .mockResolvedValueOnce(jobResponse("complete"))
+      .mockResolvedValueOnce(new Response("video bytes", { headers: { "Content-Type": "video/mp4" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const pending = loadCollectorVideo(baseUrl, "session-secret", job.sourceUrl, new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(1_600);
+    const blob = await pending;
+    expect(blob.type).toBe("video/mp4");
+    expect(await blob.text()).toBe("video bytes");
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      `${baseUrl}/v1/downloads`, `${baseUrl}/v1/downloads/${job.id}`,
+      `${baseUrl}/v1/downloads/${job.id}`, `${baseUrl}/v1/downloads/${job.id}/file`,
+    ]);
+    expect(fetchMock.mock.calls.every(([, init]) => init.headers.Authorization === "Bearer session-secret")).toBe(true);
+  });
+
+  it("stops polling immediately when the player closes", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockResolvedValueOnce(jobResponse("queued"));
+    vi.stubGlobal("fetch", fetchMock);
+    const pending = loadCollectorVideo(baseUrl, "session-secret", job.sourceUrl, controller.signal);
+    const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    await rejected;
+    await vi.advanceTimersByTimeAsync(2_400);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not start a request for an already closed player", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(loadCollectorVideo(baseUrl, "session-secret", job.sourceUrl, controller.signal))
+      .rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("cancels an in-flight media fetch when the player closes", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const pending = fetchCollectorVideoFile(baseUrl, "session-secret", job.id, undefined, controller.signal);
+    const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    controller.abort();
+    await rejected;
+    expect(fetchMock.mock.calls[0]?.[1].signal.aborted).toBe(true);
+  });
+
+  it("surfaces a failed job without fetching a video file", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jobResponse("failed", { errorCode: "media_not_found", error: "没有可播放的视频" }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(loadCollectorVideo(baseUrl, "session-secret", job.sourceUrl, new AbortController().signal))
+      .rejects.toMatchObject({ code: "media_not_found", message: "没有可播放的视频" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the collector's busy reason so the user can retry later", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      error: "download_start_failed", message: "采集器正在执行其他任务，请稍后再试。",
+    }), { status: 409 })));
+    await expect(loadCollectorVideo(baseUrl, "session-secret", job.sourceUrl, new AbortController().signal))
+      .rejects.toMatchObject({ code: "download_start_failed", message: "采集器正在执行其他任务，请稍后再试。" });
+  });
 });
 
 describe("normalizeCollectorBaseUrl", () => {

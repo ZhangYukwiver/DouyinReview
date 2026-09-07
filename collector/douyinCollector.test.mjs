@@ -12,6 +12,7 @@ import {
   profileTabUrl,
   readChatConversationCatalog,
 } from "./douyinCollector.mjs";
+import { DirectHistoryError } from "./directHistory.mjs";
 import { createEmptyRecords } from "./normalizer.mjs";
 import { createEndpointProgress } from "./progress.mjs";
 import { normalizeDirectSyncState } from "./store.mjs";
@@ -585,6 +586,15 @@ describe("DouyinCollector sync startup", () => {
 
     finishRun();
     await runGate;
+  });
+
+  it("exposes the error code so the app can react to a missing login", async () => {
+    const collector = new DouyinCollector({ executablePath: "chrome", dataDirectory: ".test", store: {} });
+    collector.runDirectRecords = vi.fn().mockRejectedValue(new DirectHistoryError("login_required", "专用浏览器尚未登录"));
+
+    expect(collector.startDirectRecords()).toBe(true);
+    await collector.syncPromise;
+    expect(collector.getStatus()).toMatchObject({ state: "error", code: "login_required", message: "专用浏览器尚未登录" });
   });
 });
 

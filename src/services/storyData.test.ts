@@ -32,7 +32,7 @@ vi.mock("react-native-svg", () => {
 import type { ChatConversationSummary, ChatMessage } from "../domain/chatRecords";
 import type { PersonalRecordCollection, PersonalVideoRecord } from "../domain/personalRecords";
 import { buildReportModel } from "../components/workspace/ReportWorkspace";
-import { buildStoryData, clearStoryData, STORY_STORAGE_KEY, writeStoryData } from "./storyData";
+import { buildStoryData, clearStoryData, signatureName, SIGNATURE_WORDS, STORY_STORAGE_KEY, writeStoryData } from "./storyData";
 
 function rec(id: string, extra: Partial<PersonalVideoRecord>): PersonalVideoRecord {
   return { id, title: `内容 ${id}`, author: "创作者甲", occurredAt: null, url: `https://www.douyin.com/video/${id}`, ...extra };
@@ -101,6 +101,30 @@ describe("story data", () => {
     expect(data.progress).toEqual({ done: 0.5, mid: 0.25, shallow: 0.25 });
     expect(data.recent.map((card) => [card.kind, card.coverUrl])).toEqual([["favorite", "https://c/f1.jpg"], ["favorite", null], ["liked", null], ["watch", "https://c/w5.jpg"]]);
     expect(data.caveats).toEqual({ noTime: 1, noVideoId: 1, warnings: 2 });
+  });
+
+  it("signs the volume with one word from each of the three lists", () => {
+    const [when, what, how] = data.profile.title.split(" · ");
+    expect(when).toMatch(/^(凌晨|清晨|上午|正午|午后|傍晚|夜里)$/u); // the peak hour is read in local time
+    expect([what, how]).toEqual(["长镜", "留到结尾"]); // 25% run past ten minutes, half were finished
+    expect(data.profile.english.split(" · ")).toHaveLength(3);
+    const empty = buildStoryData(buildReportModel({ watch_history: [], liked_videos: [], favorite_videos: [] }, [], null, []), { records: { watch_history: [], liked_videos: [], favorite_videos: [] }, chatMessages: [], chatConversations: [], source: "archive", updatedAt: null, warnings: [] });
+    expect(empty.profile.title).toBe("不定 · 寻常 · 不作停留");
+    expect(empty.profile.name).toBe("不定时的空手客");
+  });
+
+  it("names every combination of the three lists", () => {
+    expect(data.profile.name).toMatch(/的片尾常客$/u); // 长镜 × 留到结尾, prefixed by the peak hour
+    expect(data.profile.nameEnglish).toBe("ROLLING CREDITS");
+    expect(data.profile.reading).toContain("长片子你多半整段看下来");
+    const named = new Set<string>();
+    for (const when of SIGNATURE_WORDS.when) for (const what of SIGNATURE_WORDS.what) for (const how of SIGNATURE_WORDS.how) {
+      const entry = signatureName(when, what, how);
+      expect(entry.name).not.toBe("无名的一卷"); // every 6 × 5 pair carries a name, every hour a prefix
+      expect(entry.reading.length).toBeGreaterThan(40);
+      named.add(entry.name);
+    }
+    expect(named.size).toBe(SIGNATURE_WORDS.when.length * SIGNATURE_WORDS.what.length * SIGNATURE_WORDS.how.length);
   });
 
   it("summarises the mix and echo chapters", () => {

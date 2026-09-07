@@ -84,7 +84,10 @@ async function stopDesktopRuntime() {
 }
 
 async function launch() {
-  Menu.setApplicationMenu(null);
+  // macOS needs an app menu for ⌘Q and ⌘C/⌘V in text fields; Windows keeps no menu bar.
+  Menu.setApplicationMenu(process.platform === "darwin"
+    ? Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "windowMenu" }])
+    : null);
   desktopRuntime = await startDesktopRuntime();
   ipcMain.handle("desktop:get-collector-config", () => ({
     baseUrl: desktopRuntime?.collector.baseUrl,

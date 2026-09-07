@@ -49,10 +49,13 @@ import type {
 } from "../../domain/personalRecords";
 import type { CollectorStatus } from "../../services/localCollector";
 import type { AppStyle } from "../../services/appStyle";
+import Svg, { Circle } from "react-native-svg";
 import { ChatWorkspace } from "./ChatWorkspace";
+import { RecordVideoPlayer, type RecordVideoLoader } from "./RecordVideoPlayer";
 import { ReportDashboard } from "./ReportDashboard";
 import { buildReportModel } from "./ReportWorkspace";
 import { alpha, workspaceColors as color, workspaceFonts as font, workspaceRadii as radius } from "./workspaceTheme";
+import { ease, easeImage, fx, useCountUp, useDraw, useInView } from "./motion";
 
 export type WorkspaceViewKey = PersonalRecordType | "summary" | "highlights" | "chat";
 
@@ -69,6 +72,7 @@ export interface ContentWorkspaceProps {
   onChangeView: (view: WorkspaceViewKey) => void;
   onOpenRecord: (url: string) => Promise<void>;
   onDownloadRecord?: (record: PersonalVideoRecord) => Promise<void>;
+  onLoadVideo?: RecordVideoLoader;
   downloadStates?: Record<string, RecordDownloadState>;
   onOpenSettings: () => void;
   onReplayStory: () => void;
@@ -97,10 +101,13 @@ const navItems: Array<{ id: WorkspaceViewKey; label: string; icon: IconComponent
   { id: "highlights", label: "变化线索", icon: Star, accent: color.cyan },
 ];
 
-const recordNavItems = navItems.slice(0, 4);
-const annualNavItems = navItems.slice(4);
 
 const webPointer = Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null;
+
+// 侧栏收放是同一套版式在变窄：宽度做过渡，展开态的文字原地淡出并被侧栏裁掉，不换一套窄版面。
+const COLLAPSE_MS = 380;
+const collapseWidth = ease("width", COLLAPSE_MS);
+const collapseCopy = ease("opacity", 220);
 
 // ponytail: 包一层给全页默认正文字体（档案馆衬线 / 年志 Inter），比给上百条 style 逐个加 fontFamily 省
 const bodyType = { fontFamily: font.body } as const;
@@ -121,6 +128,7 @@ export function ContentWorkspace({
   onChangeView,
   onOpenRecord,
   onDownloadRecord,
+  onLoadVideo,
   downloadStates = {},
   onOpenSettings,
   onReplayStory,
@@ -145,6 +153,9 @@ export function ContentWorkspace({
   const mainWidth = Math.max(0, width - (mobile ? 0 : 36) - sidebarWidth);
   const currentNav = navItems.find((item) => item.id === activeView) ?? navItems[0]!;
   const [reportUpdateNotice, setReportUpdateNotice] = useState(false);
+  // 侧栏当前项的指示条：一根，随选中项滑动（各按钮 onLayout 报自己的 y）
+  const [navTops, setNavTops] = useState<Record<string, number>>({});
+  const reportNavTop = (id: string, y: number) => setNavTops((current) => (current[id] === y ? current : { ...current, [id]: y }));
   const seenUpdatedAtRef = useRef<string | null>(updatedAt);
   const totalRecords = records.watch_history.length + records.liked_videos.length + records.favorite_videos.length;
   const livingReport = report && isLivingReport(report) ? report : null;
@@ -175,6 +186,9 @@ export function ContentWorkspace({
     previousReportViewRef.current = reportView;
   }, [reportView]);
 
+  const shownCount = useCountUp(counts[activeView]);
+  const [ringRef, ringDrawn] = useDraw<View>();
+
   const changeView = (nextView: WorkspaceViewKey) => {
     if (isReportView(nextView) && !reportView) setReportAutoCollapsed(true);
     onChangeView(nextView);
@@ -189,70 +203,58 @@ export function ContentWorkspace({
   };
 
   return (
-    <View testID="content-workspace" style={[styles.root, mobile && styles.rootMobile]}>
+    <View {...fx({ motion: "fade" })} testID="content-workspace" style={[styles.root, mobile && styles.rootMobile]}>
       <View style={[styles.stage, mobile && styles.stageMobile]}>
       {!mobile ? <SidebarToggle collapsed={compactSidebar} onPress={toggleSidebar} /> : null}
       {!mobile ? (
-        <View testID="workspace-sidebar" style={[styles.sidebar, compactSidebar && styles.sidebarCompact]}>
-          <Brand compact={compactSidebar} trace={trace} />
+        <View testID="workspace-sidebar" style={[styles.sidebar, collapseWidth, compactSidebar && styles.sidebarCompact]}>
+          <View style={styles.sidebarBody}>
           <View accessibilityRole="tablist" style={styles.sidebarNav}>
-            {!compactSidebar ? <Text style={styles.sidebarSectionLabel}>内容记录</Text> : null}
-            {recordNavItems.map((item) => (
+            {Platform.OS === "web" && navTops[activeView] !== undefined ? (
+              <View pointerEvents="none" style={[styles.navGlider, ease("top,background-color", 380), { top: navTops[activeView]! + 14, backgroundColor: currentNav.accent }]} />
+            ) : null}
+            {navItems.map((item) => (
               <NavButton
                 key={item.id}
                 compact={compactSidebar}
                 count={counts[item.id]}
                 item={item}
-                onPress={() => changeView(item.id)}
-                selected={item.id === activeView}
-              />
-            ))}
-            {!compactSidebar ? <Text style={[styles.sidebarSectionLabel, styles.sidebarSectionLabelAnnual]}>持续报告</Text> : <View style={styles.sidebarCompactDivider} />}
-            {annualNavItems.map((item) => (
-              <NavButton
-                key={item.id}
-                compact={compactSidebar}
-                count={counts[item.id]}
-                item={item}
+                onLayoutTop={(y) => reportNavTop(item.id, y)}
                 onPress={() => changeView(item.id)}
                 selected={item.id === activeView}
               />
             ))}
           </View>
+          <ActiveDays compact={compactSidebar} days={model.activeDays} drawn={ringDrawn} viewRef={ringRef} year={model.year} />
+          </View>
           <View style={styles.sidebarFooter}>
             <Pressable
               accessibilityLabel={replayLabel}
               accessibilityRole="button"
+              {...fx({ hover: "tint" })}
               disabled={!report || report.status === "empty"}
               onPress={onReplayStory}
               style={({ pressed }) => [
                 styles.navButton,
-                compactSidebar && styles.navButtonCompact,
                 (!report || report.status === "empty") && styles.buttonDisabled,
                 pressed && styles.buttonPressed,
                 webPointer,
               ]}
             >
               <View style={styles.navIconWrap}><Sparkles color={color.accent} size={20} strokeWidth={2} /></View>
-              {!compactSidebar ? <Text style={styles.navLabel}>{replayLabel}</Text> : null}
-            </Pressable>
-            {!compactSidebar ? (
-              <View style={styles.localBadge}>
-                <View style={styles.localBadgeDot} />
-                <View style={styles.localBadgeCopy}>
-                  <Text numberOfLines={1} style={styles.localBadgeTitle}>{sourceLabel}</Text>
-                  <Text numberOfLines={1} style={styles.localBadgeMeta}>{updatedAt ? `更新 ${formatShortDate(updatedAt)}` : "本地数据"}</Text>
-                </View>
+              <View style={[styles.navMeta, collapseCopy, compactSidebar && styles.sidebarCopyHidden]}>
+                <Text numberOfLines={1} style={styles.navLabel}>{replayLabel}</Text>
               </View>
-            ) : null}
+            </Pressable>
             <Pressable
+              {...fx({ hover: "raise" })}
               accessibilityLabel="打开连接与采集设置"
               accessibilityRole="button"
               onPress={onOpenSettings}
-              style={({ pressed }) => [styles.settingsButton, compactSidebar && styles.settingsButtonCompact, pressed && styles.buttonPressed, webPointer]}
+              style={({ pressed }) => [styles.settingsButton, pressed && styles.buttonPressed, webPointer]}
             >
-              <Settings2 color={color.textSecondary} size={19} strokeWidth={2} />
-              {!compactSidebar ? <Text style={styles.settingsButtonText}>连接与采集</Text> : null}
+              <View style={styles.settingsIcon}><Settings2 color={color.textSecondary} size={19} strokeWidth={2} /></View>
+              <Text numberOfLines={1} style={[styles.settingsButtonText, collapseCopy, compactSidebar && styles.sidebarCopyHidden]}>连接与采集</Text>
             </Pressable>
           </View>
         </View>
@@ -264,7 +266,7 @@ export function ContentWorkspace({
             <Text style={styles.topbarEyebrow}>{reportView ? "LIVING REPORT" : trace ? "CONTENT STREAMS" : "CONTENT ARCHIVE"}</Text>
             <View style={styles.topbarTitleRow}>
               <Text numberOfLines={1} style={[styles.topbarTitle, mobile && styles.topbarTitleMobile]}>{currentNav.label}</Text>
-              <Text style={styles.topbarCount}>{counts[activeView].toLocaleString("zh-CN")}</Text>
+              <Text style={styles.topbarCount}>{shownCount.toLocaleString("zh-CN")}</Text>
             </View>
           </View>
           <View style={styles.topbarActions}>
@@ -282,6 +284,7 @@ export function ContentWorkspace({
               accessibilityLabel={privacy ? "关闭隐私模式" : "开启隐私模式"}
               accessibilityRole="switch"
               accessibilityState={{ checked: privacy }}
+              {...fx({ hover: "raise" })}
               onPress={onTogglePrivacy}
               style={({ pressed }) => [styles.toolbarButton, privacy && styles.toolbarButtonActive, pressed && styles.buttonPressed, webPointer]}
             >
@@ -291,6 +294,7 @@ export function ContentWorkspace({
               accessibilityLabel="重新增量读取记录"
               accessibilityRole="button"
               disabled={busy}
+              {...fx({ hover: "raise" })}
               onPress={onSync}
               style={({ pressed }) => [styles.toolbarButton, busy && styles.buttonDisabled, pressed && styles.buttonPressed, webPointer]}
             >
@@ -312,6 +316,7 @@ export function ContentWorkspace({
         {reportView && reportUpdateNotice ? (
           <Pressable
             accessibilityRole="button"
+            {...fx({ motion: "rise" })}
             accessibilityLabel="报告有更新，关闭提示"
             onPress={() => setReportUpdateNotice(false)}
             style={({ pressed }) => [styles.reportUpdateNotice, pressed && styles.buttonPressed, webPointer]}
@@ -347,6 +352,7 @@ export function ContentWorkspace({
             downloadStates={downloadStates}
             mobile={mobile}
             onDownloadRecord={onDownloadRecord}
+            onLoadVideo={onLoadVideo}
             onOpenRecord={onOpenRecord}
             onOpenSettings={onOpenSettings}
             privacy={privacy}
@@ -376,6 +382,9 @@ export function ContentWorkspace({
 
       {mobile ? (
         <View accessibilityRole="tablist" style={styles.bottomNav}>
+          {Platform.OS === "web" ? (
+            <View pointerEvents="none" style={[styles.bottomNavGlider, ease("left,background-color", 350), { left: `${(navItems.findIndex((item) => item.id === activeView) + 0.5) / navItems.length * 100}%`, backgroundColor: currentNav.accent }]} />
+          ) : null}
           {navItems.map((item) => {
             const selected = item.id === activeView;
             const Icon = item.icon;
@@ -390,12 +399,33 @@ export function ContentWorkspace({
               >
                 <Icon color={selected ? item.accent : color.textMuted} size={20} strokeWidth={selected ? 2.5 : 2} />
                 <Text style={[styles.bottomNavLabel, selected && { color: item.accent }]}>{item.label === "观看历史" ? "历史" : item.label}</Text>
-                {selected ? <View style={[styles.bottomNavIndicator, { backgroundColor: item.accent }]} /> : null}
+                {selected && Platform.OS !== "web" ? <View style={[styles.bottomNavIndicator, { backgroundColor: item.accent }]} /> : null}
               </Pressable>
             );
           })}
         </View>
       ) : null}
+      </View>
+    </View>
+  );
+}
+
+function ActiveDays({ compact, days, drawn, viewRef, year }: { compact: boolean; days: number; drawn: number; viewRef: React.RefObject<View | null>; year: number }) {
+  const radius = 14;
+  const circumference = 2 * Math.PI * radius;
+  const filled = circumference * Math.min(1, days / 365) * drawn;
+  return (
+    <View ref={viewRef} style={styles.activeDays}>
+      <View style={styles.navIconWrap}>
+        <Svg height={34} viewBox="0 0 34 34" width={34}>
+          <Circle cx={17} cy={17} fill="none" r={radius} stroke={color.border} strokeWidth={3} />
+          <Circle cx={17} cy={17} fill="none" r={radius} stroke={color.cyan} strokeDasharray={`${filled} ${circumference}`} strokeWidth={3} transform="rotate(-90 17 17)" />
+        </Svg>
+      </View>
+      <View style={[styles.navMeta, collapseCopy, compact && styles.sidebarCopyHidden]}>
+        <Text numberOfLines={1} style={styles.activeDaysText}>
+          {days ? `${year} 年有 ${days} 天留下记录` : `${year} 年还没有留下记录`}
+        </Text>
       </View>
     </View>
   );
@@ -418,48 +448,33 @@ function SidebarToggle({ collapsed, onPress }: { collapsed: boolean; onPress: ()
   );
 }
 
-function Brand({ compact, trace }: { compact: boolean; trace: boolean }) {
-  return (
-    <View style={[styles.brand, compact && styles.brandCompact]}>
-      <View style={styles.brandMarkWrap}>
-        <View style={styles.brandMarkCyan} />
-        <View style={styles.brandMarkRed} />
-        <View style={styles.brandMarkCore}><Play color={color.white} fill={color.white} size={12} /></View>
-      </View>
-      {!compact ? (
-        <View>
-          <Text style={styles.brandName}>{trace ? "内容年志" : "足迹"}</Text>
-          <Text style={styles.brandMeta}>{trace ? "TRACE · ANNUAL" : "我的内容档案"}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 function NavButton({
   compact,
   count,
   item,
+  onLayoutTop,
   onPress,
   selected,
 }: {
   compact: boolean;
   count: number;
   item: (typeof navItems)[number];
+  onLayoutTop?: (y: number) => void;
   onPress: () => void;
   selected: boolean;
 }) {
   const Icon = item.icon;
   return (
     <Pressable
+      {...fx({ hover: "tint" })}
       testID={`workspace-nav-${item.id}`}
       accessibilityLabel={`${item.label}，${count} 条`}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
+      onLayout={onLayoutTop ? (event) => onLayoutTop(event.nativeEvent.layout.y) : undefined}
       onPress={onPress}
       style={({ pressed }) => [
         styles.navButton,
-        compact && styles.navButtonCompact,
         selected && styles.navButtonSelected,
         pressed && styles.buttonPressed,
         webPointer,
@@ -468,13 +483,11 @@ function NavButton({
       <View style={[styles.navIconWrap, selected && { backgroundColor: alpha(item.accent, 0.13) }]}>
         <Icon color={selected ? item.accent : color.textMuted} size={20} strokeWidth={selected ? 2.5 : 2} />
       </View>
-      {!compact ? (
-        <>
-          <Text style={[styles.navLabel, selected && styles.navLabelSelected]}>{item.label}</Text>
-          <Text style={[styles.navCount, selected && { color: item.accent }]}>{formatCompactNumber(count)}</Text>
-        </>
-      ) : null}
-      {selected ? <View style={[styles.navIndicator, compact && styles.navIndicatorCompact, { backgroundColor: item.accent }]} /> : null}
+      <View style={[styles.navMeta, collapseCopy, compact && styles.sidebarCopyHidden]}>
+        <Text numberOfLines={1} style={[styles.navLabel, selected && styles.navLabelSelected]}>{item.label}</Text>
+        <Text style={[styles.navCount, selected && { color: item.accent }]}>{formatCompactNumber(count)}</Text>
+      </View>
+      {selected && Platform.OS !== "web" ? <View style={[styles.navIndicator, { backgroundColor: item.accent }]} /> : null}
     </Pressable>
   );
 }
@@ -484,6 +497,7 @@ function RecordsGallery({
   downloadStates,
   mobile,
   onDownloadRecord,
+  onLoadVideo,
   onOpenRecord,
   onOpenSettings,
   privacy,
@@ -496,6 +510,7 @@ function RecordsGallery({
   downloadStates: Record<string, RecordDownloadState>;
   mobile: boolean;
   onDownloadRecord?: (record: PersonalVideoRecord) => Promise<void>;
+  onLoadVideo?: RecordVideoLoader;
   onOpenRecord: (url: string) => Promise<void>;
   onOpenSettings: () => void;
   privacy: boolean;
@@ -505,11 +520,14 @@ function RecordsGallery({
   width: number;
 }) {
   const [layout, setLayout] = useState<"grid" | "list">("grid");
+  const [playingRecord, setPlayingRecord] = useState<PersonalVideoRecord | null>(null);
+  useEffect(() => { setPlayingRecord(null); }, [activeType, privacy]);
   const columns = mobile ? 2 : width < 760 ? 3 : width < 1120 ? 4 : 5;
   const label = ({ watch_history: "观看历史", liked_videos: "喜欢", favorite_videos: "收藏" })[activeType];
   const sortedRecords = useMemo(() => records, [records]);
 
   return (
+    <>
     <FlatList
       testID="record-grid"
       key={`${layout}:${columns}`}
@@ -518,7 +536,7 @@ function RecordsGallery({
       data={sortedRecords}
       keyExtractor={(item) => item.id}
       ListHeaderComponent={(
-        <View style={styles.galleryHeader}>
+        <View {...fx({ motion: "rise" })} style={styles.galleryHeader}>
           <View style={styles.galleryHeaderCopy}>
             <Text style={styles.galleryTitle}>{label}</Text>
             <Text style={styles.galleryMeta}>{sourceLabel} · {status?.message ?? `${records.length} 条本地记录`}</Text>
@@ -546,7 +564,7 @@ function RecordsGallery({
         </View>
       )}
       ListEmptyComponent={(
-        <View style={styles.emptyState}>
+        <View {...fx({ motion: "rise" })} style={styles.emptyState}>
           <View style={styles.emptyIcon}><Play color={color.cyan} fill={color.cyan} size={24} /></View>
           <Text style={styles.emptyTitle}>{label}还没有内容</Text>
           <Text style={styles.emptyDetail}>返回连接与采集页面读取本地记录。</Text>
@@ -565,6 +583,7 @@ function RecordsGallery({
         ? <RecordTile
             downloadState={downloadStates[item.id] ?? "idle"}
             onDownloadRecord={onDownloadRecord}
+            onPlayRecord={onLoadVideo ? setPlayingRecord : undefined}
             onOpenRecord={onOpenRecord}
             privacy={privacy}
             record={item}
@@ -573,12 +592,17 @@ function RecordsGallery({
         : <RecordRow onOpenRecord={onOpenRecord} privacy={privacy} record={item} type={activeType} />}
       showsVerticalScrollIndicator={false}
     />
+    {Platform.OS === "web" && playingRecord && !privacy && onLoadVideo ? (
+      <RecordVideoPlayer record={playingRecord} onLoadVideo={onLoadVideo} onClose={() => setPlayingRecord(null)} />
+    ) : null}
+    </>
   );
 }
 
 function RecordTile({
   downloadState,
   onDownloadRecord,
+  onPlayRecord,
   record,
   type,
   privacy,
@@ -586,6 +610,7 @@ function RecordTile({
 }: {
   downloadState: RecordDownloadState;
   onDownloadRecord?: (record: PersonalVideoRecord) => Promise<void>;
+  onPlayRecord?: (record: PersonalVideoRecord) => void;
   record: PersonalVideoRecord;
   type: PersonalRecordType;
   privacy: boolean;
@@ -595,6 +620,7 @@ function RecordTile({
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const tileRef = useRef<View | null>(null);
+  const [, inView] = useInView(tileRef);
   const focusCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const accent = type === "liked_videos" ? color.accent : type === "favorite_videos" ? color.amber : color.cyan;
   const imageAvailable = Boolean(record.coverUrl && !privacy && !imageFailed);
@@ -631,6 +657,7 @@ function RecordTile({
   }, []);
   return (
     <View
+      {...fx({ reveal: inView, hover: "card" })}
       ref={tileRef}
       testID={`record-tile-${record.id}`}
       onFocus={markFocused}
@@ -655,7 +682,7 @@ function RecordTile({
           {imageAvailable ? (
             <ImageBackground
               accessibilityLabel={privacy ? "已隐藏的视频封面" : `${record.title}的视频封面`}
-              imageStyle={styles.tileImage}
+              imageStyle={[styles.tileImage, easeImage("transform", 900), hovered && styles.tileImageZoom]}
               onError={() => setImageFailed(true)}
               resizeMode="cover"
               source={{ uri: record.coverUrl! }}
@@ -688,7 +715,20 @@ function RecordTile({
         </View>
       </Pressable>
       {showActions ? (
-        <View pointerEvents="auto" style={styles.tileActionsOverlay}>
+        <View {...fx({ motion: "fade" })} pointerEvents="auto" style={styles.tileActionsOverlay}>
+          {onPlayRecord ? (
+            <Pressable
+              testID="record-tile-action"
+              accessibilityLabel="播放视频"
+              accessibilityRole="button"
+              onFocus={markFocused}
+              onBlur={checkFocusBoundary}
+              onPress={() => onPlayRecord(record)}
+              style={({ pressed }) => [styles.tilePlayButton, pressed && styles.tileActionPressed, webPointer]}
+            >
+              <Play color={color.white} fill={color.white} size={28} style={{ marginLeft: 3 }} />
+            </Pressable>
+          ) : null}
           <View style={styles.tileActionsRow}>
             <Pressable
               testID="record-tile-action"
@@ -733,6 +773,7 @@ function RecordRow({ record, type, privacy, onOpenRecord }: { record: PersonalVi
       accessibilityRole={record.url ? "link" : undefined}
       disabled={!record.url}
       onPress={() => record.url && void onOpenRecord(record.url)}
+      {...fx({ hover: "tint" })}
       style={({ pressed }) => [styles.recordRow, pressed && styles.recordRowPressed, record.url && webPointer]}
     >
       <View style={[styles.rowThumb, { backgroundColor: fallbackColor(record.id) }]}>
@@ -780,7 +821,7 @@ function LivingHighlightsView({
       contentContainerStyle={[styles.highlightsContent, mobile && styles.summaryContentMobile]}
       showsVerticalScrollIndicator={false}
     >
-      <View style={[styles.highlightsHeader, mobile && styles.highlightsHeaderMobile]}>
+      <View {...fx({ motion: "rise" })} style={[styles.highlightsHeader, mobile && styles.highlightsHeaderMobile]}>
         <View style={styles.dashboardHeaderCopy}>
           <Text style={styles.summaryEyebrow}>CHANGES · {formatLivingFreshness(report.freshness)}</Text>
           <Text style={[styles.summaryTitle, mobile && styles.summaryTitleMobile]}>变化线索</Text>
@@ -792,7 +833,7 @@ function LivingHighlightsView({
         </View>
       </View>
       <View style={styles.livingChangeList}>
-        {chapters.map((chapter) => <LivingChangeCard chapter={chapter} key={chapter.id} onOpenRecord={onOpenRecord} privacy={privacy} />)}
+        {chapters.map((chapter, index) => <LivingChangeCard chapter={chapter} index={index} key={chapter.id} onOpenRecord={onOpenRecord} privacy={privacy} />)}
       </View>
       <View style={styles.highlightsFootnote}>
         <Sparkles color={color.cyan} size={16} />
@@ -804,16 +845,19 @@ function LivingHighlightsView({
 
 function LivingChangeCard({
   chapter,
+  index,
   onOpenRecord,
   privacy,
 }: {
   chapter: LivingChapter;
+  index: number;
   onOpenRecord: (url: string) => Promise<void>;
   privacy: boolean;
 }) {
   const accent = chapter.id === "shift" ? color.accent : chapter.id === "profile" ? color.green : color.cyan;
+  const [cardRef, inView] = useInView<View>();
   return (
-    <View style={[styles.livingChangeCard, { borderTopColor: accent }]}>
+    <View {...fx({ reveal: inView, i: index + 1, hover: "lift" })} ref={cardRef} style={[styles.livingChangeCard, { borderTopColor: accent }]}>
       <View style={styles.livingChangeHeader}>
         <Text style={styles.livingChangeEyebrow}>{chapter.eyebrow}</Text>
         <Text style={[styles.livingChangeStatus, chapter.status !== "ok" && styles.livingChangeStatusMuted]}>{chapter.status === "ok" ? "已形成" : "尚在形成"}</Text>
@@ -906,7 +950,7 @@ function HighlightsView({
       contentContainerStyle={[styles.highlightsContent, mobile && styles.summaryContentMobile]}
       showsVerticalScrollIndicator={false}
     >
-      <View style={[styles.highlightsHeader, mobile && styles.highlightsHeaderMobile]}>
+      <View {...fx({ motion: "rise" })} style={[styles.highlightsHeader, mobile && styles.highlightsHeaderMobile]}>
         <View style={styles.dashboardHeaderCopy}>
           <Text style={styles.summaryEyebrow}>HIGHLIGHTS · {report.periodLabel.toUpperCase()}</Text>
           <Text style={[styles.summaryTitle, mobile && styles.summaryTitleMobile]}>变化线索</Text>
@@ -963,6 +1007,7 @@ function HighlightCard({
 }) {
   const [imageFailed, setImageFailed] = useState(false);
   useEffect(() => setImageFailed(false), [item?.coverUrl]);
+  const [cardRef, inView] = useInView<View>();
   const imageAvailable = Boolean(item?.coverUrl && !privacy && !imageFailed);
   const canOpen = Boolean(item?.url && !privacy);
   const title = item ? (privacy ? "内容标题已隐藏" : item.title) : "暂无可确定内容";
@@ -971,6 +1016,8 @@ function HighlightCard({
 
   return (
     <Pressable
+      {...fx({ reveal: inView, i: index + 1, hover: "card" })}
+      ref={cardRef}
       accessibilityLabel={`${label}：${title}${canOpen ? "，打开抖音视频" : ""}`}
       accessibilityRole={canOpen ? "link" : undefined}
       disabled={!canOpen}
@@ -1016,7 +1063,7 @@ function HighlightCard({
 
 function SummaryEmpty() {
   return (
-    <View style={styles.summaryEmpty}>
+    <View {...fx({ motion: "rise" })} style={styles.summaryEmpty}>
       <Sparkles color={color.green} size={30} />
       <Text style={styles.emptyTitle}>这一章还在形成</Text>
       <Text style={styles.emptyDetail}>完成一次读取并积累带可靠行为时间的记录后，持续报告会逐步生成当前主线、变化线索和行为画像。</Text>
@@ -1089,39 +1136,29 @@ const styles = StyleSheet.create({
   cornerTR: { right: 8, top: 8, borderRightWidth: 1, borderTopWidth: 1 },
   cornerBL: { left: 8, bottom: 8, borderLeftWidth: 1, borderBottomWidth: 1 },
   cornerBR: { right: 8, bottom: 8, borderRightWidth: 1, borderBottomWidth: 1 },
-  sidebar: { width: 224, flexShrink: 0, paddingHorizontal: 14, paddingBottom: 16, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: color.border, backgroundColor: color.sidebar },
-  sidebarCompact: { width: 82, paddingHorizontal: 9 },
+  // 收起态只改宽度：内边距、图标位置、各行高度都不变，窄侧栏是宽侧栏被裁出来的。
+  sidebar: { width: 224, flexShrink: 0, paddingHorizontal: 14, paddingBottom: 16, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: color.border, backgroundColor: color.sidebar, overflow: "hidden" },
+  sidebarCompact: { width: 82 },
+  sidebarCopyHidden: { opacity: 0 },
   sidebarToggle: { position: "absolute", left: 14, top: 2, width: 32, height: 32, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: color.borderSoft, borderRadius: radius.medium, backgroundColor: color.surface, zIndex: 5 },
-  brand: { height: 72, flexDirection: "row", alignItems: "center", gap: 11, paddingRight: 10, paddingLeft: 52 },
-  brandCompact: { justifyContent: "center", paddingLeft: 0, paddingRight: 0, paddingTop: 34 },
-  brandMarkWrap: { width: 38, height: 38, position: "relative", alignItems: "center", justifyContent: "center" },
-  brandMarkCyan: { position: "absolute", width: 26, height: 26, left: 3, top: 4, borderRadius: 2, backgroundColor: color.cyan },
-  brandMarkRed: { position: "absolute", width: 26, height: 26, right: 3, bottom: 4, borderRadius: 2, backgroundColor: color.accent },
-  brandMarkCore: { width: 26, height: 26, zIndex: 2, alignItems: "center", justifyContent: "center", borderRadius: 2, backgroundColor: color.black },
-  brandName: { color: color.text, fontSize: 17, fontWeight: "700", letterSpacing: 4, fontFamily: font.serif },
-  brandMeta: { color: color.textMuted, fontSize: 10, letterSpacing: 1.4, marginTop: 3, fontFamily: font.mono },
-  sidebarNav: { flex: 1, gap: 4, paddingTop: 20 },
-  sidebarSectionLabel: { color: color.textMuted, fontSize: 9, fontWeight: "700", letterSpacing: 3, paddingHorizontal: 8, paddingBottom: 7 },
-  sidebarSectionLabelAnnual: { marginTop: 15 },
-  sidebarCompactDivider: { height: 1, marginHorizontal: 8, marginVertical: 10, backgroundColor: color.border },
+  sidebarBody: { flex: 1, paddingTop: 46 },
+  sidebarNav: { gap: 4 },
+  activeDays: { flexDirection: "row", alignItems: "center", minHeight: 44, marginTop: 26, paddingHorizontal: 8 },
+  activeDaysText: { flex: 1, color: color.textMuted, fontSize: 10, marginLeft: 7 },
   navButton: { position: "relative", minHeight: 52, flexDirection: "row", alignItems: "center", paddingHorizontal: 8, borderRadius: radius.medium },
-  navButtonCompact: { justifyContent: "center", paddingHorizontal: 0 },
+  // 展开态的文字块固定宽度：侧栏变窄时它被裁掉，而不是挤成省略号。
+  navMeta: { width: 144, flexShrink: 0, flexDirection: "row", alignItems: "center" },
   navButtonSelected: { backgroundColor: color.surfaceRaised },
   navIconWrap: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: radius.medium },
   navLabel: { flex: 1, color: color.textSecondary, fontSize: 13, fontWeight: "600", letterSpacing: 2, marginLeft: 7 },
   navLabelSelected: { color: color.text, fontWeight: "700" },
   navCount: { color: color.textMuted, fontSize: 11, fontFamily: font.didot, letterSpacing: 0.5, marginRight: 6 },
   navIndicator: { position: "absolute", left: -14, top: 14, bottom: 14, width: 3, borderTopRightRadius: 2, borderBottomRightRadius: 2 },
-  navIndicatorCompact: { left: -9 },
+  navGlider: { position: "absolute", left: -14, width: 3, height: 24, borderTopRightRadius: 2, borderBottomRightRadius: 2 },
   sidebarFooter: { gap: 8 },
-  localBadge: { minHeight: 56, flexDirection: "row", alignItems: "center", gap: 9, paddingHorizontal: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border },
-  localBadgeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.green },
-  localBadgeCopy: { flex: 1, minWidth: 0 },
-  localBadgeTitle: { color: color.textSecondary, fontSize: 11, fontWeight: "600", letterSpacing: 1 },
-  localBadgeMeta: { color: color.textMuted, fontSize: 9, marginTop: 3 },
   settingsButton: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 17, borderWidth: 1, borderColor: color.border, borderRadius: radius.medium, backgroundColor: color.surface },
-  settingsButtonCompact: { justifyContent: "center", paddingHorizontal: 0 },
-  settingsButtonText: { color: color.textSecondary, fontSize: 12, fontWeight: "600", letterSpacing: 2 },
+  settingsIcon: { width: 19, height: 19 },
+  settingsButtonText: { flexShrink: 0, color: color.textSecondary, fontSize: 12, fontWeight: "600", letterSpacing: 2 },
   main: { flex: 1, minWidth: 0, minHeight: 0, backgroundColor: "transparent" },
   mainMobile: { paddingBottom: 68 },
   topbar: { height: 72, flexDirection: "row", alignItems: "center", paddingHorizontal: 28, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.border, backgroundColor: "transparent" },
@@ -1153,6 +1190,7 @@ const styles = StyleSheet.create({
   tilePressed: { opacity: 0.74 },
   tileVisual: { position: "relative", width: "100%", aspectRatio: 0.76, overflow: "hidden", borderRadius: radius.small, backgroundColor: color.surface },
   tileImage: { width: "100%", height: "100%" },
+  tileImageZoom: { transform: [{ scale: 1.06 }] },
   fallbackVisual: { flex: 1, alignItems: "center", justifyContent: "center" },
   fallbackDisc: { width: 62, height: 62, alignItems: "center", justifyContent: "center", borderWidth: 1, borderRadius: 31, backgroundColor: color.scrim },
   fallbackIndex: { position: "absolute", right: 10, bottom: 8, color: color.text, opacity: 0.2, fontSize: 30, fontWeight: "900" },
@@ -1182,6 +1220,11 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   tileActionsRow: { flexDirection: "row", gap: 8 },
+  tilePlayButton: {
+    position: "absolute", top: "50%", left: "50%", marginTop: -30, marginLeft: -30,
+    width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center",
+    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.85)", backgroundColor: "rgba(20,24,23,0.55)",
+  },
   tileAction: {
     minHeight: 34,
     flex: 1,
@@ -1218,6 +1261,7 @@ const styles = StyleSheet.create({
   bottomNavItem: { position: "relative", flex: 1, minWidth: 0, alignItems: "center", justifyContent: "center", gap: 4 },
   bottomNavLabel: { color: color.textMuted, fontSize: 10, letterSpacing: 1.5 },
   bottomNavIndicator: { position: "absolute", top: 0, width: 28, height: 2 },
+  bottomNavGlider: { position: "absolute", top: 0, width: 28, height: 2, marginLeft: -14 },
   summaryContentMobile: { padding: 12, paddingBottom: 86 },
   dashboardHeaderCopy: { flex: 1, minWidth: 0 },
   dashboardPeriodMobile: { width: "100%", alignItems: "flex-start", paddingLeft: 0, paddingTop: 14, borderTopWidth: 1, borderTopColor: color.border, borderLeftWidth: 0 },

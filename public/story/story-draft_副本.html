@@ -325,8 +325,10 @@
     .card .open { margin-top: auto; padding-top: 12px; }
     .card.in:hover { transform: translateY(-3px); }
     .card-kind { position: absolute; right: 10px; top: 10px; padding: 3px 7px; border-radius: 4px; color: var(--cerulean); background: rgba(255,255,255,.78); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); font: 400 9px var(--mono); font-style: normal; letter-spacing: .1em; }
-    body.privacy-on .card-cover { filter: blur(12px) saturate(.4); }
-    body.privacy-on .rc .card-cover { filter: blur(12px) saturate(.4); }
+    body.privacy-on .card-cover, body.privacy-on .avatar, body.privacy-on .ava, body.privacy-on .sc { filter: blur(12px) saturate(.4); }
+    .privacy-text { user-select: none; }
+    .privacy-run { display: contents; font: inherit; }
+    .privacy-char { display: inline-block; inline-size: var(--privacy-width); font: inherit; font-family: var(--mono); letter-spacing: 0; text-align: center; }
 
     /* 04 mix — bento; cerulean card is the one saturated surface */
     .bento { display: grid; grid-template-columns: 1.1fr .9fr .9fr; gap: 16px; align-items: start; margin-top: 40px; --beat: 36px; }
@@ -465,7 +467,6 @@
     .chips-head { margin: 0; color: var(--ash); font: 400 9px var(--mono); letter-spacing: .18em; }
     .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--fog); font: 400 10px var(--mono); }
     .chips i { padding: 2px 6px; border-radius: 4px; color: var(--charcoal); background: var(--linen); font-style: normal; }
-    body.privacy-on [data-slot="terms-chat"], body.privacy-on [data-slot="chat-words"] { filter: blur(6px); }
 
     /* 06 evidence */
     .ratio { display: grid; grid-template-columns: 1fr 100px; gap: 22px; align-items: center; padding-bottom: 22px; border-bottom: 1px solid var(--mist); }
@@ -494,9 +495,13 @@
     .signature-name { color: var(--ink); font: 300 clamp(40px, 4.6vw, 62px)/1.12 var(--serif); letter-spacing: -.025em; }
     .signature-name em { font-style: italic; font-weight: 400; }
     .signature-en { margin-top: 12px; color: var(--ash); font: 400 10px var(--mono); letter-spacing: .3em; }
-    .seal { position: relative; min-height: 320px; display: grid; place-items: center; border: 1px solid var(--mist); border-radius: 24px; background: var(--paper); box-shadow: var(--shadow-diagram); overflow: hidden; }
-    .seal svg { width: 240px; height: 240px; }
-    .seal small { position: absolute; left: 20px; bottom: 16px; color: var(--fog); font: 9px var(--mono); letter-spacing: .12em; }
+    .seal { position: relative; min-height: 320px; display: flex; flex-direction: column; gap: 14px; padding: 30px 30px 46px; border: 1px solid var(--mist); border-radius: 24px; background: var(--paper); box-shadow: var(--shadow-diagram); overflow: hidden; }
+    .seal .kicker { color: var(--fog); font: 400 9px var(--mono); letter-spacing: .28em; }
+    .type-name { margin: 0; color: var(--ink); font: 300 clamp(28px, 2.6vw, 36px)/1.2 var(--serif); letter-spacing: -.02em; }
+    .type-name em { font-style: italic; font-weight: 400; }
+    .type-en { margin-top: -6px; color: var(--ash); font: 400 9px var(--mono); letter-spacing: .26em; }
+    .type-note { margin: 0; padding-top: 14px; border-top: 1px solid var(--mist); color: var(--charcoal); font: 400 13px/1.95 var(--sans); }
+    .seal small { position: absolute; left: 30px; bottom: 16px; color: var(--fog); font: 9px var(--mono); letter-spacing: .12em; }
     .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
     .colophon-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--mist); color: var(--fog); font: 400 10px var(--mono); letter-spacing: .04em; }
     .colophon-foot span { flex: 1; min-width: 220px; }
@@ -616,8 +621,8 @@
     <div class="nav-right">
       <span id="clock">--:--</span>
       <button id="skyBtn" class="nav-icon" aria-label="切换卷首天空" title="切换卷首天空">◐</button>
+      <button id="privacy" class="nav-btn ghost" aria-pressed="false">开启隐私模式 ◐</button>
       <button id="toWorkspace" class="nav-btn ghost" hidden onclick="toWorkspace()">工作台</button>
-      <button class="nav-btn" onclick="document.querySelector('#evidence').scrollIntoView({behavior:'smooth'})">数据口径 <span class="cir">→</span></button>
     </div>
   </header>
 
@@ -1044,9 +1049,9 @@
         </div>
         <div class="signature">
           <div data-reveal style="--i:1">
-            <div class="signature-name" data-slot="sig-name">午后的<em>收藏者</em></div>
-            <div class="signature-en" data-slot="sig-en">THE AFTERNOON COLLECTOR</div>
-            <p class="lead" style="margin-top:22px" data-slot="sig-lead">这不是人格测试，只是把这一年已经发生的选择放回原处，看它们连成什么样子，再落一个款。</p>
+            <div class="signature-name" data-slot="sig-name">午后 · 长镜 · <em>留到结尾</em></div>
+            <div class="signature-en" data-slot="sig-en">AFTERNOON · LONG TAKES · TO THE END</div>
+            <p class="lead" style="margin-top:22px" data-slot="sig-lead">三个词都从这一年的记录里取：什么时候看、看的是什么、看完留下什么。右边这个名字就是这三个词合起来的读法，不是人格测试，也不是给人下判断。</p>
             <div class="actions">
               <button class="btn btn-dark" id="toDashboard" onclick="toWorkspace()">进入持续报告 <span class="cir">→</span></button>
               <button class="btn btn-blue" onclick="window.scrollTo({top:0,behavior:'smooth'})">再读一遍 <span class="cir">↺</span></button>
@@ -1054,19 +1059,16 @@
             </div>
           </div>
           <div class="seal" data-reveal style="--i:2">
-            <svg viewBox="0 0 240 240" fill="none" aria-hidden="true">
-              <circle cx="120" cy="120" r="96" stroke="#dee2de" stroke-width="1"/>
-              <circle cx="120" cy="120" r="78" stroke="#41a1cf" stroke-width="1" stroke-dasharray="1 7" stroke-linecap="round"/>
-              <circle cx="120" cy="120" r="44" stroke="#2c2c2c" stroke-width="1"/>
-              <text x="120" y="113" text-anchor="middle" font-family="Fraunces, Georgia, serif" font-size="17" fill="#171717">TRACE</text>
-              <text x="120" y="134" text-anchor="middle" font-family="ui-monospace, monospace" font-size="8" letter-spacing="3" fill="#646464" data-slot="seal-year">2025</text>
-            </svg>
-            <small data-slot="seal-note">SEALED · PARTIAL SAMPLE · LOCAL</small>
+            <p class="kicker">THE NAME OF THIS VOLUME</p>
+            <h3 class="type-name" data-slot="type-name">午后的<em>片尾常客</em></h3>
+            <div class="type-en" data-slot="type-en">ROLLING CREDITS</div>
+            <p class="type-note" data-slot="type-note">这一年大都在午后展开，光斜过桌面，你把一天里最松快的一段留在这儿。长片子你多半整段看下来，中途很少跳走，等它放完了才起身。这一年花掉的时间，大都落在这种一段一段的内容上。</p>
+            <small><span data-slot="seal-year">2026</span> · <span data-slot="seal-note">SEALED · PARTIAL SAMPLE · LOCAL</span></small>
           </div>
         </div>
         <div class="colophon-foot">
           <span data-slot="colophon">内容年志 · 交互设计稿 · 数字为演示快照，不构成第二份事实源 · 口径以采集器为准</span>
-          <a href="story-entry.html">回到入口卡 ↗</a><button id="privacy">隐藏封面与名称 ◐</button><button onclick="window.scrollTo({top:0,behavior:'smooth'})">回到卷首 ↑</button>
+          <a href="story-entry.html">回到入口卡 ↗</a><button onclick="window.scrollTo({top:0,behavior:'smooth'})">回到卷首 ↑</button>
         </div>
       </div>
     </section>
@@ -1200,16 +1202,117 @@
     /* ---------- ◐ in the nav: step through the five paintings by hand ---------- */
     $("#skyBtn").addEventListener("click", () => { heroSky = (heroSky + 1) % 5; applySky(); });
 
-    /* ---------- privacy (colophon foot) ---------- */
+    /* ---------- privacy (nav) ---------- */
 
+    // React Bits Decrypted Text: same random glyph alphabet and 50ms cadence.
+    // https://reactbits.dev/text-animations/decrypted-text
+    // Privacy keeps shuffling indefinitely; no iteration may resolve to the original text.
+    const privacyAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!@#$%^&*()_+";
+    const privacySelector = [
+      ".stream-terms > i", ".card h4", ".card-body p", ".rc h4", ".rc p",
+      '[data-slot="topic-name"]', '[data-slot="topic-meta"]', ".topic-lines .ml > span:first-child",
+      '[data-slot="creator-name"]', '[data-slot="creator-meta"]', ".creator-lines .ml > span:first-child",
+      '[data-slot="len-longest"]', ".music-row .mt", ".heat-row em",
+      ".rw .mask", ".rv", ".share-sample .st > b", ".share-sample .st > span", ".share-sample .st > p",
+      ".conv .who b", ".chips > i", ".words .ml > span:first-child",
+      '[data-slot="sig-name"]', '[data-slot="sig-en"]', '[data-slot="sig-lead"]',
+      '[data-slot="type-name"]', '[data-slot="type-en"]', '[data-slot="type-note"]'
+    ].join(",");
+    const privacyMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    const privacyMeasure = document.createElement("canvas").getContext("2d");
+    const privacySegmenter = typeof Intl.Segmenter === "function" ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
+    let privacyEntries = [], privacyTimer = null, privacyObserver = null;
+
+    function shufflePrivateText(entry) {
+      entry.glyphs.forEach(({ node, original }) => {
+        // Avoid even a one-letter name flashing its original character.
+        const chars = privacyAlphabet.replace(original, "");
+        const index = Math.floor(Math.random() * chars.length);
+        node.textContent = chars[index] === node.textContent ? chars[(index + 1) % chars.length] : chars[index];
+      });
+    }
+    function updatePrivacyAnimation() {
+      clearInterval(privacyTimer);
+      privacyTimer = null;
+      if (!privacyEntries.length || document.hidden || privacyMotion.matches) return;
+      privacyTimer = setInterval(() => {
+        privacyEntries.forEach((entry) => { if (entry.visible) shufflePrivateText(entry); });
+      }, 50);
+    }
+    function hidePrivateText() {
+      privacyEntries = $$(privacySelector).map((root) => {
+        const entry = { root, glyphs: [], replacements: [], visible: false, label: root.getAttribute("aria-label") };
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        const texts = [];
+        while (walker.nextNode()) texts.push(walker.currentNode);
+        texts.forEach((text) => {
+          if (!text.textContent.trim()) return;
+          const style = getComputedStyle(text.parentElement), size = parseFloat(style.fontSize) || 16;
+          privacyMeasure.font = `${style.fontStyle} ${style.fontWeight} ${size}px ${style.fontFamily}`;
+          const spacing = parseFloat(style.letterSpacing) || 0;
+          const upright = style.writingMode.startsWith("vertical") && style.textOrientation === "upright";
+          const range = upright ? document.createRange() : null;
+          let offset = 0;
+          const run = document.createElement("samp");
+          run.className = "privacy-run";
+          run.setAttribute("aria-hidden", "true");
+          const chars = privacySegmenter ? Array.from(privacySegmenter.segment(text.textContent), (s) => s.segment) : Array.from(text.textContent);
+          chars.forEach((char) => {
+            let advance = privacyMeasure.measureText(char).width + spacing;
+            if (range) {
+              // Upright Latin glyphs can occupy more than 1em in the display font.
+              range.setStart(text, offset);
+              range.setEnd(text, offset + char.length);
+              advance = range.getBoundingClientRect().height;
+            }
+            offset += char.length;
+            if (/^\s+$/u.test(char)) { run.append(char); return; }
+            const node = document.createElement("samp");
+            node.className = "privacy-char";
+            node.style.setProperty("--privacy-width", `${Math.max(.05, advance / size)}em`);
+            run.append(node);
+            entry.glyphs.push({ node, original: char });
+          });
+          entry.replacements.push({ text, run });
+        });
+        // Prepare all glyphs before replacing text; keep originals in memory, never in data attributes or hidden DOM.
+        shufflePrivateText(entry);
+        entry.replacements.forEach(({ text, run }) => text.replaceWith(run));
+        root.classList.add("privacy-text");
+        root.setAttribute("aria-label", "隐私内容已隐藏");
+        return entry;
+      });
+      if (typeof IntersectionObserver === "function") {
+        const byRoot = new Map(privacyEntries.map((entry) => [entry.root, entry]));
+        privacyObserver = new IntersectionObserver((changes) => {
+          changes.forEach(({ target, isIntersecting }) => { byRoot.get(target).visible = isIntersecting; });
+        });
+        privacyEntries.forEach(({ root }) => privacyObserver.observe(root));
+      } else privacyEntries.forEach((entry) => { entry.visible = true; });
+      updatePrivacyAnimation();
+    }
+    function restorePrivateText() {
+      clearInterval(privacyTimer);
+      privacyTimer = null;
+      privacyObserver?.disconnect();
+      privacyObserver = null;
+      privacyEntries.forEach(({ root, replacements, label }) => {
+        replacements.forEach(({ text, run }) => run.replaceWith(text));
+        root.classList.remove("privacy-text");
+        if (label === null) root.removeAttribute("aria-label"); else root.setAttribute("aria-label", label);
+      });
+      privacyEntries = [];
+    }
     $("#privacy").addEventListener("click", (e) => {
       const on = document.body.classList.toggle("privacy-on");
-      e.currentTarget.textContent = on ? "显示封面与名称 ◑" : "隐藏封面与名称 ◐";
-      $$(".card p, .rc p, .conv .who b").forEach((el) => {
-        if (on) { el.dataset.orig = el.textContent; el.textContent = "HIDDEN / 已隐藏"; }
-        else if (el.dataset.orig) el.textContent = el.dataset.orig;
-      });
+      e.currentTarget.textContent = on ? "关闭隐私模式 ◑" : "开启隐私模式 ◐";
+      e.currentTarget.setAttribute("aria-pressed", String(on));
+      if (on) hidePrivateText(); else restorePrivateText();
     });
+    document.addEventListener("visibilitychange", updatePrivacyAnimation);
+    privacyMotion.addEventListener("change", updatePrivacyAnimation);
+    addEventListener("pagehide", () => { clearInterval(privacyTimer); privacyTimer = null; });
+    addEventListener("pageshow", updatePrivacyAnimation);
 
     // the painted gradient stays underneath, so a cover that fails to load never leaves a white hole
     const cover = (el, url) => { if (!el || !url) return; const prev = getComputedStyle(el).backgroundImage; el.classList.add("real"); el.style.backgroundImage = `url("${String(url).replace(/"/g, "%22")}")${prev && prev !== "none" ? `, ${prev}` : ""}`; el.style.backgroundSize = "cover"; el.style.backgroundPosition = "center"; };
@@ -1542,9 +1645,14 @@
 
       /* 07 signature */
       const sig = S("sig-name");
-      if (sig) { const t = d.profile.title || "正在成形的自己"; const k = t.lastIndexOf("的"); sig.textContent = ""; if (k > 0 && k < t.length - 1) sig.append(t.slice(0, k + 1), el("em", "", t.slice(k + 1))); else sig.append(t); }
+      // the signature is three words joined by "·"; the last one carries the italic
+      if (sig) { const parts = (d.profile.title || "正在成形的自己").split("·").map((w) => w.trim()).filter(Boolean); sig.textContent = ""; if (parts.length > 1) sig.append(`${parts.slice(0, -1).join(" · ")} · `, el("em", "", parts[parts.length - 1])); else sig.append(parts[0] || "正在成形的自己"); }
       txt("sig-en", d.profile.english || "TRACE · SIGNATURE");
-      if (d.profile.reason) txt("sig-lead", d.profile.reason);
+      // the combined name reads "<时候前缀>的<名字>"; the name itself carries the italic
+      const type = S("type-name");
+      if (type && d.profile.name) { const n = d.profile.name, k = n.lastIndexOf("的"); type.textContent = ""; if (k > 0 && k < n.length - 1) type.append(n.slice(0, k + 1), el("em", "", n.slice(k + 1))); else type.append(n); }
+      if (d.profile.nameEnglish) txt("type-en", d.profile.nameEnglish);
+      if (d.profile.reading) txt("type-note", d.profile.reading);
       txt("seal-year", d.year);
       txt("seal-note", d.status === "partial" ? "SEALED · PARTIAL SAMPLE · LOCAL" : "SEALED · LOCAL SAMPLE");
       txt("colophon", `内容年志 · 数字来自本地快照（${sourceLabel}${stamp ? ` · ${stamp}` : ""}）· 不构成第二份事实源 · 口径以采集器为准`);

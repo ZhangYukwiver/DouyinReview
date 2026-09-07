@@ -47,8 +47,14 @@ async function findChromeExecutable() {
   const homeDirectory = homedir();
   const candidates = [
     process.env.DOUYIN_CHROME_PATH,
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    path.join(homeDirectory, "Applications", "Google Chrome.app", "Contents", "MacOS", "Google Chrome"),
+    // Any Chromium-based browser works; same order as collector/server.mjs.
+    ...[
+      "Google Chrome.app/Contents/MacOS/Google Chrome",
+      "Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+      "Brave Browser.app/Contents/MacOS/Brave Browser",
+      "Chromium.app/Contents/MacOS/Chromium",
+      "Comet.app/Contents/MacOS/Comet",
+    ].flatMap((relative) => [path.join("/Applications", relative), path.join(homeDirectory, "Applications", relative)]),
     "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
   ];
 
@@ -310,7 +316,7 @@ async function main() {
   await assertPortAvailable(COLLECTOR_PORT, "采集器");
   await assertPortAvailable(WEB_PORT, "网页");
   const executablePath = await findChromeExecutable();
-  if (!executablePath) throw new Error("未找到 Google Chrome。请先安装 Chrome，再重新打开应用。");
+  if (!executablePath) throw new Error("未找到 Chrome、Edge、Brave 或 Chromium 浏览器。请先安装其中一个，再重新打开应用。");
   await runExport();
   await startCollector(executablePath);
   await startWebServer();

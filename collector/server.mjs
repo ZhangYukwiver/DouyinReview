@@ -3,7 +3,7 @@
 import { createReadStream } from "node:fs";
 import { access, chmod, mkdir, stat } from "node:fs/promises";
 import { createServer } from "node:http";
-import { networkInterfaces } from "node:os";
+import { homedir, networkInterfaces } from "node:os";
 import path from "node:path";
 import { randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -65,21 +65,35 @@ async function firstExistingPath(candidates) {
   return null;
 }
 
+// Any Chromium-based browser works: the collector drives it over CDP with its own profile.
+// Preference order is Chrome, Edge (bundled with Windows), Brave, Chromium, then Playwright's cache.
+const CHROMIUM_BROWSERS = {
+  darwin: [
+    "Google Chrome.app/Contents/MacOS/Google Chrome",
+    "Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    "Brave Browser.app/Contents/MacOS/Brave Browser",
+    "Chromium.app/Contents/MacOS/Chromium",
+    "Comet.app/Contents/MacOS/Comet",
+  ],
+  win32: [
+    "Google/Chrome/Application/chrome.exe",
+    "Microsoft/Edge/Application/msedge.exe",
+    "BraveSoftware/Brave-Browser/Application/brave.exe",
+    "Chromium/Application/chrome.exe",
+  ],
+  linux: ["google-chrome", "google-chrome-stable", "microsoft-edge", "brave-browser", "chromium", "chromium-browser"],
+};
+
+function browserRoots() {
+  if (process.platform === "win32") return [process.env.LOCALAPPDATA, process.env.ProgramFiles, process.env["ProgramFiles(x86)"]];
+  if (process.platform === "darwin") return ["/Applications", path.join(homedir(), "Applications")];
+  return ["/usr/bin"];
+}
+
 async function findChromeExecutable() {
-  const localAppData = process.env.LOCALAPPDATA;
-  const programFiles = process.env.ProgramFiles;
-  const programFilesX86 = process.env["ProgramFiles(x86)"];
-  return firstExistingPath([
-    process.env.DOUYIN_CHROME_PATH,
-    localAppData && path.join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
-    programFiles && path.join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
-    programFilesX86 && path.join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    chromium.executablePath(),
-    "/usr/bin/google-chrome",
-    "/usr/bin/google-chrome-stable",
-    "/usr/bin/chromium",
-  ]);
+  const roots = browserRoots().filter(Boolean);
+  const installed = (CHROMIUM_BROWSERS[process.platform] ?? []).flatMap((relative) => roots.map((root) => path.join(root, relative)));
+  return firstExistingPath([process.env.DOUYIN_CHROME_PATH, ...installed, chromium.executablePath()]);
 }
 
 function localLanAddresses() {
@@ -220,7 +234,7 @@ export async function startCollectorServer({
   const options = { lan, port, origins };
   const executablePath = configuredExecutablePath ?? await findChromeExecutable();
   if (!executablePath) {
-    throw new Error("未找到 Google Chrome。可通过 DOUYIN_CHROME_PATH 指定浏览器路径。");
+    throw new Error("未找到 Chrome、Edge、Brave 或 Chromium 浏览器。可通过 DOUYIN_CHROME_PATH 指定浏览器路径。");
   }
 
   await mkdir(dataDirectory, { recursive: true, mode: 0o700 });
