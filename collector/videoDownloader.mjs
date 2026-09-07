@@ -390,19 +390,27 @@ export async function discoverDouyinVideo(context, sourceUrl, {
   }
 }
 
+function truncateFileSegment(value, maxLength) {
+  let result = "";
+  for (const character of value.toWellFormed()) {
+    if (result.length + character.length > maxLength) break;
+    result += character;
+  }
+  return result;
+}
+
 function cleanFileSegment(value, fallback = "抖音视频") {
   const cleaned = String(value ?? "")
     .replace(/[<>:"/\\|?*\u0000-\u001F]/gu, "_")
     .replace(/\s+/gu, " ")
     .replace(/^[. ]+|[. ]+$/gu, "")
-    .trim()
-    .slice(0, MAX_TITLE_LENGTH);
-  return cleaned || fallback;
+    .trim();
+  return truncateFileSegment(cleaned, MAX_TITLE_LENGTH) || fallback;
 }
 
 export function makeVideoFileName({ title, videoId, sourceUrl } = {}) {
   const safeTitle = cleanFileSegment(title);
-  const safeId = cleanFileSegment(videoId, "").replace(/[^\p{L}\p{N}._-]/gu, "").slice(0, 40);
+  const safeId = truncateFileSegment(cleanFileSegment(videoId, "").replace(/[^\p{L}\p{N}._-]/gu, ""), 40);
   const digest = createHash("sha256").update(String(sourceUrl ?? "")).digest("hex").slice(0, 10);
   return `${safeTitle}-${safeId || digest}.mp4`;
 }
@@ -414,7 +422,7 @@ async function hasVideoSignature(filePath) {
     const buffer = Buffer.alloc(16);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
     if (bytesRead >= 8 && buffer.subarray(4, 8).toString("ascii") === "ftyp") return true;
-    return bytesRead >= 4 && buffer.subarray(0, 4).toString("ascii") === "\u001aE\xdf\xa3";
+    return bytesRead >= 4 && buffer.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]));
   } catch {
     return false;
   } finally {
