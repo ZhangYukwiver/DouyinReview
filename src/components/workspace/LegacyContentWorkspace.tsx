@@ -51,6 +51,7 @@ import type { CollectorStatus } from "../../services/localCollector";
 import type { AppStyle } from "../../services/appStyle";
 import { ChatWorkspace } from "./ChatWorkspace";
 import { ReportDashboard } from "./ReportDashboard";
+import { RecordVideoPlayer, type RecordVideoLoader } from "./RecordVideoPlayer";
 import { buildReportModel } from "./ReportWorkspace";
 import { alpha, workspaceColors as color, workspaceFonts as font, workspaceRadii as radius } from "./workspaceTheme";
 import { ease, easeImage, fx, useCountUp, useInView } from "./motion";
@@ -71,6 +72,7 @@ export interface ContentWorkspaceProps {
   onOpenRecord: (url: string) => Promise<void>;
   onDownloadRecord?: (record: PersonalVideoRecord) => Promise<void>;
   downloadStates?: Record<string, RecordDownloadState>;
+  onLoadVideo?: RecordVideoLoader;
   onOpenSettings: () => void;
   onReplayStory: () => void;
   onSync: () => void;
@@ -126,6 +128,7 @@ export function ContentWorkspace({
   onOpenSettings,
   onReplayStory,
   onSync,
+  onLoadVideo,
   onTogglePrivacy,
   privacy,
   appStyle = "archive",
@@ -349,6 +352,7 @@ export function ContentWorkspace({
           />
         ) : activeView === "summary" ? (
           model.status === "empty"
+            onLoadVideo={onLoadVideo}
             ? <SummaryEmpty />
             : <ReportDashboard mobile={mobile} model={model} onOpenRecord={onOpenRecord} privacy={privacy} width={mainWidth} />
         ) : activeView === "highlights" ? (
@@ -493,6 +497,7 @@ function NavButton({
       </View>
       {!compact ? (
         <>
+  onLoadVideo,
           <Text style={[styles.navLabel, selected && styles.navLabelSelected]}>{item.label}</Text>
           <Text style={[styles.navCount, selected && { color: item.accent }]}>{formatCompactNumber(count)}</Text>
         </>
@@ -505,6 +510,7 @@ function NavButton({
 function RecordsGallery({
   activeType,
   downloadStates,
+  onLoadVideo?: RecordVideoLoader;
   mobile,
   onDownloadRecord,
   onOpenRecord,
@@ -514,11 +520,14 @@ function RecordsGallery({
   sourceLabel,
   status,
   width,
+  const [playingRecord, setPlayingRecord] = useState<PersonalVideoRecord | null>(null);
+  useEffect(() => { setPlayingRecord(null); }, [activeType, privacy]);
 }: {
   activeType: PersonalRecordType;
   downloadStates: Record<string, RecordDownloadState>;
   mobile: boolean;
   onDownloadRecord?: (record: PersonalVideoRecord) => Promise<void>;
+    <>
   onOpenRecord: (url: string) => Promise<void>;
   onOpenSettings: () => void;
   privacy: boolean;
@@ -574,6 +583,7 @@ function RecordsGallery({
           <Text style={styles.emptyTitle}>{label}还没有内容</Text>
           <Text style={styles.emptyDetail}>返回连接与采集页面读取本地记录。</Text>
           <Pressable
+            onPlayRecord={onLoadVideo ? setPlayingRecord : undefined}
             accessibilityRole="button"
             onPress={onOpenSettings}
             style={({ pressed }) => [styles.emptyButton, pressed && styles.buttonPressed, webPointer]}
@@ -582,12 +592,17 @@ function RecordsGallery({
             <Text style={styles.emptyButtonText}>连接与采集</Text>
           </Pressable>
         </View>
+    {Platform.OS === "web" && playingRecord && !privacy && onLoadVideo ? (
+      <RecordVideoPlayer record={playingRecord} onLoadVideo={onLoadVideo} onClose={() => setPlayingRecord(null)} />
+    ) : null}
+    </>
       )}
       numColumns={layout === "grid" ? columns : 1}
       renderItem={({ item }) => layout === "grid"
         ? <RecordTile
             downloadState={downloadStates[item.id] ?? "idle"}
             onDownloadRecord={onDownloadRecord}
+  onPlayRecord,
             onOpenRecord={onOpenRecord}
             privacy={privacy}
             record={item}
@@ -595,6 +610,7 @@ function RecordsGallery({
           />
         : <RecordRow onOpenRecord={onOpenRecord} privacy={privacy} record={item} type={activeType} />}
       showsVerticalScrollIndicator={false}
+  onPlayRecord?: (record: PersonalVideoRecord) => void;
     />
   );
 }
@@ -700,6 +716,19 @@ function RecordTile({
             {record.watchProgress?.percent !== undefined && record.watchProgress.percent !== null ? (
               <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${Math.max(2, Math.min(100, record.watchProgress.percent))}%`, backgroundColor: accent }]} /></View>
             ) : null}
+          {onPlayRecord ? (
+            <Pressable
+              testID="record-tile-action"
+              accessibilityLabel="播放视频"
+              accessibilityRole="button"
+              onFocus={markFocused}
+              onBlur={checkFocusBoundary}
+              onPress={() => onPlayRecord(record)}
+              style={({ pressed }) => [styles.tilePlayButton, pressed && styles.tileActionPressed, webPointer]}
+            >
+              <Play color={color.white} fill={color.white} size={28} style={{ marginLeft: 3 }} />
+            </Pressable>
+          ) : null}
             <View style={styles.tilePlayMeta}>
               <Play color={color.white} fill={color.white} size={12} />
               <Text style={styles.tilePlayText}>{record.stats?.playCount ? formatCompactNumber(record.stats.playCount) : "记录"}</Text>
@@ -1191,6 +1220,11 @@ const styles = StyleSheet.create({
   fallbackVisual: { flex: 1, alignItems: "center", justifyContent: "center" },
   fallbackDisc: { width: 62, height: 62, alignItems: "center", justifyContent: "center", borderWidth: 1, borderRadius: 31, backgroundColor: color.scrim },
   fallbackIndex: { position: "absolute", right: 10, bottom: 8, color: color.text, opacity: 0.2, fontSize: 30, fontWeight: "900" },
+  tilePlayButton: {
+    position: "absolute", top: "50%", left: "50%", marginTop: -30, marginLeft: -30,
+    width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center",
+    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.85)", backgroundColor: "rgba(20,24,23,0.55)",
+  },
   tileTopMeta: { position: "absolute", top: 9, right: 9, left: 9, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   typeBadge: { width: 8, height: 8, borderRadius: 4 },
   durationBadge: { color: color.white, fontSize: 10, fontWeight: "800", paddingHorizontal: 6, paddingVertical: 3, borderRadius: radius.small, backgroundColor: color.scrim },
