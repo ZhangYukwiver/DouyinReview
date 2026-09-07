@@ -1,61 +1,174 @@
-# 抖音个人内容报告
+<p align="center">
+    <img src="build/icon.png" alt="内容数据工作台" width="200" />
+</p>
 
-这是一个完全本地、隐私优先的抖音个人记录工具。它通过独立浏览器读取本人账号当前可见的观看历史、点赞列表和收藏列表，再基于已有记录生成会持续更新的个人内容报告。
+<div align="center">
+    <h1>douyin-annual-recap - 抖音本地采集与年度回顾工具</h1>
+    <p>本地读取抖音观看、喜欢、收藏与聊天记录并生成持续更新的年度回顾，无界面增量读取，档案馆 / 内容年志两套版式，隐私优先，不接外部 AI</p>
+    <p>完全本地运行：标题、作者、封面、Cookie 和报告都不会发送到任何外部分析服务。</p>
+    <img src="https://img.shields.io/github/v/tag/ZhangYukwiver/douyin-annual-recap" alt="Version" />
+    <img src="https://img.shields.io/github/stars/ZhangYukwiver/douyin-annual-recap" alt="Stars" />
+    <img src="https://img.shields.io/github/downloads/ZhangYukwiver/douyin-annual-recap/total" alt="Downloads" />
+    <img src="https://img.shields.io/github/forks/ZhangYukwiver/douyin-annual-recap" alt="Forks" />
+    <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+    <img src="https://img.shields.io/badge/Expo-000020?logo=expo&logoColor=white" alt="Expo" />
+    <img src="https://img.shields.io/badge/React_Native-20232A?logo=react&logoColor=61DAFB" alt="React Native" />
+    <img src="https://img.shields.io/badge/Electron-47848F?logo=electron&logoColor=white" alt="Electron" />
+    <img src="https://img.shields.io/badge/Playwright-2EAD33?logo=playwright&logoColor=white" alt="Playwright" />
+</div>
 
-默认增量读取使用本地专用浏览器和已校验的读取组件，不使用抖音开放平台、外部 AI 或 Coze。完整读取仍通过普通浏览器页面完成；标题、作者、封面、Cookie 和本地报告都不会发送到外部分析服务。
+## 年度回顾
 
-## 当前流程
+两套版式可在应用内一键切换：**档案馆**是深色纸面的应用内分页报告，**内容年志**是纸面、墨色与信号蓝的长卷故事页。下图均为示例数据。
 
-1. 双击项目根目录中的 `抖音年度回顾.app`。这个旧文件名暂时保留，打开后会在后台启动本地采集器和 Web 页面，无需终端或手工输入配对码。
-2. 应用每次打开后首次连接采集器时，如果专用浏览器还没登录（或还没抓到无界面读取模板），会自动开始一次完整读取并弹出独立浏览器，在里面登录自己的抖音账号后会自动继续；随后会自动全量读取一轮聊天，工作台会显示读取进度，也可随时手动点“读取聊天”再次读取。
-3. 在连接与采集工作台点击“连接采集器”。应用会从本机采集器自动获取一次性配对码并完成连接；默认会在前台自动读取新记录，也可以手动点击“增量读取”。
-4. 进入内容库后，可在观看历史、喜欢、收藏、聊天和持续报告页面之间切换；聊天页按好友会话展示本地消息快照，群聊仅展示统计摘要。只要本地已有记录，采集进行中也可以打开报告：报告和内容库使用这次采集开始前的数据，采集结束后自动换成新数据，持续报告页会提示“报告有更新”。
-5. 连接与采集页的“03 · 整体风格”可在“档案馆”与“内容年志”之间切换，选择会保存在浏览器本地，并同时决定采集器页、内容库（记录、聊天、持续报告）和报告本体的版式：档案馆是深色纸面的应用内分页报告；内容年志是纸面、墨色与信号蓝的一套界面（配色、字体、圆角由 `src/components/workspace/workspaceTheme.ts` 的 CSS 变量整体切换，只在 Web 生效）。选“内容年志”时，“打开报告”会在应用内以同源 iframe 打开 `public/story/` 里的入口卡，卡片显示当前观看、喜欢、收藏和聊天条数，穿卡后进入故事页；故事页卷尾的“进入持续报告”（以及导航上的“工作台”、Esc 键）回到应用内的持续报告，采集器连接和内存中的记录都不会丢。打开前应用会把一份汇总快照（条数、月份与时辰分布、交集、话题与创作者排行、重复音乐、内容点赞数快照、内容发布年龄、时长、聊天形态、四条数据流各自的高频词条与集中度、聊天高频词、分享视频词条、字段覆盖率、称号等，不含原始记录、Cookie 或 Token）写入浏览器同源 localStorage，故事页各章读取它渲染；没有快照时显示设计稿的演示数字，“清除本地记录”会一并删掉这份快照。入口卡与故事页的源文件在 `prototype/`，画作在 `jimeng/story-images/`，改完运行 `npm run sync:story` 同步到 `public/story/`（`npm run build:web` 会自动同步）。词条口径：视频侧的“词条”只取显式话题标签（`record.topics` 与标题里的 `#xxx`，大小写合并、每条记录只计一次），不做分词；聊天高频词用浏览器内置的 `Intl.Segmenter` 分词，先剔掉平台模板（同一文案——数字不计——出现在三个以上会话的整组消息）再统计，群聊正文不参与，环境没有 `Intl.Segmenter` 时这一项为空；覆盖率有三层：前 12 个词条覆盖多少条、覆盖一半需要多少个词条（集中度）、以及各字段有值的条数占比（`occurredAt`/`videoId`/`topics`/`durationSeconds`/`publishedAt`/`stats.diggCount`/`watchProgress`，最后一项只按观看记录算）。
+<table>
+  <tr>
+    <td align="center" colspan="2"><b>档案馆</b>（应用内 12 章分页翻阅）</td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="docs/screenshots/report-01.jpg" alt="档案馆 · 入口" width="800"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/report-02.jpg" alt="档案馆 · 观测凭证" width="400"/></td>
+    <td><img src="docs/screenshots/report-03.jpg" alt="档案馆 · 内容足迹" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/report-04.jpg" alt="档案馆 · 时间轴" width="400"/></td>
+    <td><img src="docs/screenshots/report-05.jpg" alt="档案馆 · 你的节拍" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/report-06.jpg" alt="档案馆 · 你如何停留" width="400"/></td>
+    <td><img src="docs/screenshots/report-08.jpg" alt="档案馆 · 创作者宇宙" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/report-11.jpg" alt="档案馆 · 意外发现" width="400"/></td>
+    <td><img src="docs/screenshots/report-12.jpg" alt="档案馆 · 习惯印章" width="400"/></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><b>内容年志</b>（穿卡入口 + 逐章滚动的长卷）</td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><img src="docs/screenshots/story-hero.jpg" alt="内容年志 · 卷首" width="800"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/story-sample.jpg" alt="内容年志 · 样本" width="400"/></td>
+    <td><img src="docs/screenshots/story-time.jpg" alt="内容年志 · 时间" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/story-kept.jpg" alt="内容年志 · 留下" width="400"/></td>
+    <td><img src="docs/screenshots/story-mix.jpg" alt="内容年志 · 组成" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/story-roll.jpg" alt="内容年志 · 高频词条长卷" width="400"/></td>
+    <td><img src="docs/screenshots/story-echo.jpg" alt="内容年志 · 聊天回声" width="400"/></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/story-evidence.jpg" alt="内容年志 · 台账与边界" width="400"/></td>
+    <td><img src="docs/screenshots/story-signature.jpg" alt="内容年志 · 落款" width="400"/></td>
+  </tr>
+</table>
 
-持续报告不需要先选择年份，也不要求每条记录都具有行为时间。没有日期的记录仍会参与内容总量；应用不会用发布时间或采集时间替代行为时间。报告默认观察最近 30 天，并在样本不足时回退到最近 90 天，同时用此前窗口比较变化。喜欢与收藏的偏好变化统一采用 `play_progress.last_modified_time`，并与观看时间序列分开统计。
+## 界面预览
 
-## 为什么还会滚动页面
+<table>
+  <tr>
+    <td align="center" colspan="2"><b>连接与采集工作台</b>（自动取配对码连接本机采集器，选择整体风格；左为档案馆，右为内容年志）</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/setup-archive.png" alt="连接与采集 · 档案馆" width="400"/></td>
+    <td><img src="docs/screenshots/setup-trace.png" alt="连接与采集 · 内容年志" width="400"/></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><b>内容库</b>（观看历史、喜欢、收藏按记录展示，视频可下载到本地并在应用内播放）</td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/screenshots/records-archive.png" alt="内容库" width="800"/></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><b>聊天</b>（按好友会话展示本地消息快照，群聊只展示统计摘要）</td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/screenshots/chat-archive.png" alt="聊天" width="800"/></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><b>持续报告</b>（不用选年份，默认观察最近 30 天并与此前窗口比较；采集结束后自动换新数据）</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/dashboard-archive.png" alt="持续报告 · 档案馆" width="400"/></td>
+    <td><img src="docs/screenshots/dashboard-trace.png" alt="持续报告 · 内容年志" width="400"/></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><b>内容年志入口卡</b>（显示当前观看、喜欢、收藏和聊天条数，穿卡进入故事页）</td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/screenshots/story-entry.jpg" alt="内容年志入口卡" width="800"/></td>
+  </tr>
+</table>
 
-抖音网页接口由抖音自己的页面脚本携带当前登录状态和签名发起。采集器只监听这些网页响应，不直接伪造 Cookie、`a_bogus`、`X-Bogus` 或其他私有签名。
+## 功能一览
 
-因此完整读取需要在正确列表的真实可滚动区域中滚动，触发网页加载下一批数据，直到接口明确返回末页。若页面无法继续滚动、游标不前进或响应重复，本次列表会标记为不完整，并保留已有完整数据。
+| 模块 | 能力 |
+| --- | --- |
+| 增量读取（默认） | 通过无界面接口读取新记录；每个分类首次运行读取全部可见记录并建立增量边界，再次运行只读到本地已知记录为止；本地旧记录不会因平台可见窗口缩短或取消点赞、取消收藏而被删除 |
+| 前台自动增量读取 | 连接采集器后默认开启，应用回到前台时复用增量接口更新视频记录；可在设置中暂停，不包含聊天，也不在应用关闭后常驻 |
+| 完整读取 | 依次定位观看历史、点赞、收藏三个主页面，在真实可滚动区域持续滚动并合并唯一记录，直到接口明确返回末页 |
+| 手动监听 | 打开独立浏览器由你自行浏览，采集器只保存监听期间实际出现的受支持网页响应 |
+| 聊天读取 | 每次启动后的首次连接会无头全量读取会话目录和好友历史，工作台实时显示进度；之后只在手动点「读取聊天」时读取一轮。好友对话保存完整消息字段，群聊只保存群名和统计 |
+| 内容库 | 观看历史 / 喜欢 / 收藏 / 聊天 / 持续报告五个页面；采集进行中也能打开，结束后自动换成新数据；记录卡片可把视频下载到本地并在应用内播放 |
+| 持续报告 | 不需要先选年份，也不要求每条记录都有行为时间；默认观察最近 30 天，样本不足时回退 90 天，并与此前窗口比较变化 |
+| 年度回顾 | 档案馆：深色纸面的应用内 12 章分页报告；内容年志：穿卡入口 + 逐章滚动的长卷，各章按汇总快照渲染 |
+| 整体风格 | 档案馆 / 内容年志一键切换，同时决定采集器页、内容库和报告本体的配色、字体与圆角；选择保存在浏览器本地 |
+| 换账号 | 清除独立浏览器中的抖音会话和本地记录，然后等待你登录另一个账号 |
+| 文件导入 | JSON / ZIP 作为备用数据源，总结时使用文件中的全部有效记录 |
+| 手机连接 | 电脑端启用 LAN 模式后，同一可信局域网内的手机可用一次性配对码连接 |
 
-## 无界面增量读取
+## 报告章节
 
-该路径复用专用 Profile 的登录态，使用真正的 Chrome 无头模式，不会弹出窗口或出现在任务栏，也不需要手动打开或滚动列表。每个分类首次运行会读取全部可见记录并建立独立增量边界；再次运行只读取到该分类的本地已知记录为止。观看历史逐页直接请求接口；点赞和收藏由抖音页面运行时生成当前签名并在后台自动滚动。每个分类完成后立即合并保存，后续分类失败不会撤销已完成分类。观看历史只追加或更新，不会因为抖音当前可见窗口缩短而移除本地旧记录；取消点赞、取消收藏等删除也不会在增量读取中移除本地旧记录。
+| 档案馆（12 章） | 内容年志（9 幕） |
+| --- | --- |
+| 01 入口 · 02 观测凭证 · 03 内容足迹 · 04 时间轴 | 卷首：把这一年的痕迹，你留下的 |
+| 05 你的节拍 · 06 你如何停留 | 样本：一份样本，四种笔迹 |
+| 07 内容回声 · 08 创作者宇宙 | 时间：常来的月份，常来的时辰 |
+| 09 聊天回声 · 10 交叉洞察 | 留下：三个环的交集，和看完的深度 |
+| 11 意外发现 · 12 习惯印章 | 组成：话题、来路，与质地 |
+| | 长卷：高频词条 |
+| | 回声：九种消息形态，两种边界 |
+| | 证据：台账与边界 |
+| | 落款：一个正在成形的自己 |
 
-先安装并离线检查固定版本签名器：
+> 报告只使用记录中的显式作者、话题、音乐、时长和平台互动字段，不调用外部 AI 推测兴趣，也不做心理诊断。视频侧的"词条"只取显式话题标签，不做分词；聊天高频词用浏览器内置的 `Intl.Segmenter` 分词并先剔除平台模板消息，群聊正文不参与。
+
+## 快速开始
+
+### 1. 下载桌面安装包（推荐）
+
+1. 打开 Release 页面（最新版）：https://github.com/ZhangYukwiver/douyin-annual-recap/releases/latest
+2. Windows 下载 `ContentInsights-Setup-<version>.exe`；Apple Silicon Mac 下载 `ContentInsights-<version>-arm64.dmg`
+3. 本机需要已安装 Chrome、Edge、Brave、Chromium 或 Comet 中的任意一个（Windows 自带的 Edge 即可）
+4. 启动「内容数据工作台」，点击「连接采集器」；首次连接会弹出独立浏览器，在里面登录自己的抖音账号后会自动开始读取
+
+> 安装包只含应用代码、Web 页面和已校验的签名器，不含本地记录、登录状态或浏览器配置。采集记录保存在 macOS 的 `~/Library/Application Support/内容数据工作台/collector/` 或 Windows 当前用户的应用数据目录，升级不会覆盖。
+>
+> 两个安装包都没有开发者签名。macOS 首次打开前需在终端执行一次 `xattr -cr "/Applications/内容数据工作台.app"`，否则会提示应用已损坏；Windows 可能出现 SmartScreen 提示，选择「更多信息 → 仍要运行」。
+
+### 2. 从源码运行（开发者 / 高级用户）
+
+```bash
+git clone https://github.com/ZhangYukwiver/douyin-annual-recap.git
+cd douyin-annual-recap
+npm install
+```
+
+安装并离线校验固定版本的签名器（增量读取需要）：
 
 ```bash
 npm run direct:setup
 npm run direct:check
 ```
 
-签名器来自 `mafqla/douyin-api@42987a1`，安装时逐文件校验 SHA-256，并保存在已忽略的 `.local-data/direct-signer/`。macOS 使用系统沙箱禁止签名进程联网和写文件；Windows 使用 Node 权限模型禁止写文件、创建子进程和 Worker，并限制它只能加载校验过的签名目录及必要的 Node 内置模块。上游许可文件随安装内容保留，Windows 安装包会携带同一份已校验资源。
-
-连接采集器后，默认按钮会执行增量读取。尚未建立边界的分类必须到达末页；已有边界的分类到达本地已知记录或末页后立即保存。页面初始化时出现的单次 401/403 会继续等待同次加载中的有效响应；最终仍无有效响应，或遇到游标异常、重复页、429、非零平台状态时，当前分类不保存不完整结果，之前已完成的分类仍然保留。进度状态会分别显示接口返回数、保留或新增数，以及过滤数。观看日期优先读取响应中的逐作品 `aweme_date` 映射，并兼容 `history_info.view_time`；两者都缺失时保持为空，不会使用发布时间或采集时间替代。喜欢和收藏日期统一读取各自响应中的 `play_progress.last_modified_time`，字段缺失时保持为空。观看进度优先用 `play_progress.play_progress` 与视频时长计算，并兼容 `history_info` 中的进度字段；采集器不会按观看进度阈值丢弃可识别记录，接口未提供可计算进度时仍保留该记录。
-
-这是未经抖音公开文档承诺的私有接口，可能失效或触发账号风控。当前仅用于本机测试账号验证，不应作为公开、多用户或商业服务。
-
-## macOS 一键启动
-
-- 保持 `.app` 与本项目在同一目录，不要单独移到“应用程序”。
-- 首次打开时允许访问“文稿”文件夹。
-- 浏览器刷新后如需重新连接，再次双击 `.app`。
-- 从 Dock 退出该应用会停止它启动的本地服务。
-
-修改启动脚本后可重新生成应用：
+分别启动采集器与 Web 页面：
 
 ```bash
-npm run app:mac
-```
-
-## 开发方式
-
-安装依赖并分别启动采集器与 Web 页面：
-
-```bash
-npm install
 npm run collector
 ```
 
@@ -65,100 +178,119 @@ npm run collector
 npm run web
 ```
 
-制作或视觉回归时，可用进程 watchdog 包住启动命令；它按 1 秒采样整个命令的子进程树，累计 CPU 超过 500% 或 RSS 超过 2 GB 并持续 3 次就自动停止，避免异常进程长期占用资源：
+打开 `http://localhost:8081`，点击「连接采集器」。页面与采集器在同一台电脑时会自动获取并填入 8 位一次性配对码。
 
-```bash
-npm run watch:process -- npm run web
-# 桌面开发同理：npm run watch:process -- npm run desktop
-```
+其他开发方式：
 
-打开 `http://localhost:8081`，点击“连接采集器”。当页面与采集器位于同一台电脑时，应用会自动获取并填入 8 位一次性配对码；局域网内的其他设备仍需填写采集器显示的配对码。连接后默认开启“前台自动增量读取”：首次进入前台或从后台回到前台时只读取视频记录，读取中、手动监听、完整读取和切换账号时会跳过；应用关闭后不会运行系统级后台采集，也不会持续读取聊天。
+- macOS 一键启动：`npm run app:mac` 生成 `抖音年度回顾.app`，双击即可在后台启动采集器和页面；保持它与项目在同一目录，首次打开时允许访问「文稿」文件夹，从 Dock 退出会停止它启动的本地服务。它只伺服 `dist/`，改完源码要先 `npm run build:web`。
+- Windows 桌面开发版：`npm run desktop` 会构建 Web 页面并启动 Electron 和仅监听本机的内置采集器。
+- 进程看护：`npm run watch:process -- npm run web` 按秒采样子进程树，CPU 持续超过 500% 或 RSS 超过 2 GB 时自动停止。
+- 验证：`npm run typecheck`、`npm test`、`npm run build:web`。
 
-## Windows 桌面版
+### 3. 使用流程
 
-桌面开发版会构建 Web 页面并启动 Electron 和仅监听本机的内置采集器；点击“连接采集器”即可自动取码并连接：
+1. 点击「连接采集器」。应用从本机采集器自动获取一次性配对码并完成连接，默认在前台自动读取新记录，也可以手动点「增量读取」。
+2. 首次连接时如果专用浏览器还没登录，会自动开始一次完整读取并弹出独立浏览器；登录后自动继续，随后自动全量读取一轮聊天。
+3. 进入内容库，在观看历史、喜欢、收藏、聊天和持续报告之间切换；采集进行中也可以打开报告，结束后会提示「报告有更新」。
+4. 在「03 · 整体风格」里选择档案馆或内容年志，然后点「打开报告」。内容年志会先把一份汇总快照（条数、月份与时辰分布、交集、话题与创作者排行、聊天形态、高频词条等，不含原始记录、Cookie 或 Token）写入浏览器本地，再以应用内同源页面打开入口卡；「清除本地记录」会一并删掉这份快照。
+5. 内容年志的源文件在 `prototype/`，改完运行 `npm run sync:story` 同步到 `public/story/`（`npm run build:web` 会自动同步）。
 
-```bash
-npm run desktop
-```
+## 打包安装包
 
-生成带桌面和开始菜单快捷方式的 NSIS 安装器：
+### Windows（NSIS 安装器）
 
 ```bash
 npm run desktop:build
 ```
 
-安装器输出到 `release/ContentInsights-Setup-<version>.exe`。桌面版需要本机已安装 Chrome、Edge、Brave 或 Chromium 中的任意一个（Windows 自带的 Edge 即可）；采集记录保存在当前 Windows 用户的应用数据目录，应用升级不会覆盖。未签名的本地构建可能触发 Windows SmartScreen 提示。
+输出到 `release/ContentInsights-Setup-<version>.exe`，带桌面和开始菜单快捷方式。
 
-## macOS 安装包
-
-在 Apple Silicon Mac 上生成可以直接分发的 DMG。安装包只含应用代码、Web 页面和已校验的签名器，不含本地记录、登录状态、浏览器配置或下载的视频：
+### macOS（DMG）
 
 ```bash
 npm run desktop:build:mac
 ```
 
-输出到 `release/ContentInsights-<version>-arm64.dmg`。收到安装包的人把应用拖进“应用程序”即可，本机需要已安装 Chrome、Edge、Brave、Chromium 或 Comet 中的任意一个；采集记录保存在 `~/Library/Application Support/内容数据工作台/collector/`。这份构建没有 Apple 开发者签名，首次打开前需在终端执行一次：
+在 Apple Silicon Mac 上输出 `release/ContentInsights-<version>-arm64.dmg`。没有 Apple 开发者签名时会做 ad-hoc 签名，收件人首次打开前仍需执行上面的 `xattr -cr`。
 
-```bash
-xattr -cr "/Applications/内容数据工作台.app"
-```
+## 采集原理与边界
 
-否则 macOS 会提示应用已损坏或无法验证开发者。
+**为什么还会滚动页面。** 抖音网页接口由抖音自己的页面脚本携带当前登录状态和签名发起。采集器只监听这些网页响应，不直接伪造 Cookie、`a_bogus`、`X-Bogus` 或其他私有签名。因此完整读取需要在正确列表的真实可滚动区域中滚动，触发网页加载下一批数据，直到接口明确返回末页。若页面无法继续滚动、游标不前进或响应重复，本次列表会标记为不完整，并保留已有完整数据。完整读取不会绕过验证码或安全提示；页面结构或响应格式变化时会返回明确错误，不会把无法读取误报为空列表。
 
-## 采集方式
+**无界面增量读取。** 复用专用 Profile 的登录态，使用真正的 Chrome 无头模式，不弹窗口、不出现在任务栏。观看历史逐页直接请求接口；点赞和收藏由抖音页面运行时生成当前签名并在后台自动滚动。每个分类完成后立即合并保存，后续分类失败不会撤销已完成分类。签名器来自 `mafqla/douyin-api@42987a1`，安装时逐文件校验 SHA-256 并保存在已忽略的 `.local-data/direct-signer/`；macOS 用系统沙箱禁止签名进程联网和写文件，Windows 用 Node 权限模型禁止写文件、创建子进程和 Worker。页面初始化时的单次 401/403 会继续等待同次加载中的有效响应；遇到游标异常、重复页、429 或非零平台状态时，当前分类不保存不完整结果。
 
-- **增量读取（默认）**：优先通过无界面接口读取新记录；每个分类首次运行建立增量边界，再次运行只读取到本地已知记录为止，并保留本地旧记录。
-- **前台自动增量读取**：连接采集器后默认开启，应用进入前台时复用增量接口更新视频记录；可在连接与采集设置中暂停，不包含聊天消息。
-- **完整读取**：依次定位观看历史、点赞和收藏三个主页面，持续滚动并合并唯一记录，直到各接口明确返回末页；观看历史与已有记录合并，平台当前不可见的旧观看不会被删除。
-- **手动监听**：打开独立浏览器后，由你自行浏览页面。采集器只保存监听期间实际出现的受支持网页响应，不验证列表是否完整。
-- **聊天读取（单次）**：每次应用启动后的首次连接会用无头浏览器全量读取当前会话和好友历史，工作台实时显示“会话 x/y”和已读取条数；之后只在用户手动点“读取聊天”时读取一轮，完成后自动关闭，不会持续监听。会话目录会同时保存联系人昵称和头像地址（仅保留 HTTPS 抖音图片域名）；群聊只保存群名、已读取消息总数和本人发言数，好友对话沿接口游标保存已读取的完整消息字段，不会弹出浏览器窗口。
-- **换账号**：清除独立浏览器中的抖音会话和本地记录，然后等待你登录另一个账号。
-- **文件导入**：JSON / ZIP 仍作为备用数据源。总结时使用导入文件中的全部有效记录。
+**时间字段口径。** 观看日期优先读取响应中的逐作品 `aweme_date` 映射并兼容 `history_info.view_time`；喜欢和收藏日期统一读取 `play_progress.last_modified_time`；两者缺失时保持为空，不会用发布时间或采集时间替代。观看进度优先用 `play_progress.play_progress` 与视频时长计算，采集器不会按进度阈值丢弃可识别记录。
 
-完整读取不会绕过验证码或安全提示。抖音页面结构或响应格式变化时会返回明确错误，不会把无法读取误报为空列表。
+**当前边界。**
+
+- 增量读取走的是未经抖音公开文档承诺的私有接口，可能失效或触发账号风控；当前仅用于本机个人账号，不应作为公开、多用户或商业服务。
+- 报告描述的是网页或接口当前可见并成功读取的记录，不保证覆盖抖音服务端未提供的更早历史。
+- 暂不包含直播或影视综历史、收藏夹深度遍历、截图分享、PNG / PDF 导出。
+- Web 端提供持续报告、记录、聊天和数据源页面；原生端暂时只保留记录和数据源。
 
 ## 本地接口与隐私
 
 - 本地服务默认监听 `127.0.0.1:4765`。
-- `/v1/health` 用于健康检查，`/v1/pairing-code` 仅向本机回环连接返回一次性配对码，`/v1/pair` 完成配对，`/v1/sync` 启动完整页面同步，`/v1/sync/stop` 停止当前读取；`/v1/chat/observe` 只启动一轮聊天读取，完成后自动停止，`/v1/chat/observe/stop` 仅用于提前取消。
+- `/v1/health` 用于健康检查，`/v1/pairing-code` 仅向本机回环连接返回一次性配对码，`/v1/pair` 完成配对，`/v1/sync` 启动完整页面同步，`/v1/sync/stop` 停止当前读取；`/v1/chat/observe` 启动一轮聊天读取，`/v1/chat/observe/stop` 用于提前取消。
 - `/v1/experimental/records-direct` 只允许本机回环连接，启动默认增量读取使用的观看历史直读及点赞、收藏无界面采集。
 - 12 小时会话 Token 只保存在应用内存和请求头中，不进入 URL 或本地存储。
-- 独立浏览器配置保存在 `.local-data/browser-profile/`。
-- 直接读取模板保存在 `.local-data/direct-history-template.json`，只含 UA、`webid` 和白名单参数，不含 Cookie、Token 或签名。
-- 归一化记录保存在 `.local-data/records.json`。
+- 独立浏览器配置保存在 `.local-data/browser-profile/`；直接读取模板保存在 `.local-data/direct-history-template.json`，只含 UA、`webid` 和白名单参数；归一化记录保存在 `.local-data/records.json`。
 - 原始响应、请求头、Cookie、签名和完整诊断 URL 不会写入记录文件。
-
-App 中的“清除本地缓存”只删除本地归一化记录，不会清除登录状态、Cookie，也不会修改抖音账号里的观看、点赞或收藏状态；下一次读取会重新获取全部可见记录。
+- 应用中的「清除本地记录」只删除本地归一化记录和汇总快照，不会清除登录状态，也不会修改抖音账号里的观看、点赞或收藏状态。
 
 ## 手机连接
 
-电脑和手机需位于同一可信局域网。电脑端显式启用 LAN 模式：
-
-```bash
-npm run collector -- --lan
-```
-
-应用中把服务地址改为采集器显示的局域网地址，例如 `http://192.168.1.20:4765`。Web 页面从局域网访问时还需传入实际页面来源：
+电脑和手机需位于同一可信局域网。电脑端显式启用 LAN 模式，并在 Web 页面从局域网访问时传入实际页面来源：
 
 ```bash
 npm run collector -- --lan --origin http://192.168.1.20:8081
 ```
 
-LAN 模式仍使用一次性配对码和内存会话，但流量是局域网 HTTP，只应在可信网络使用。
+应用中把服务地址改为采集器显示的局域网地址，例如 `http://192.168.1.20:4765`。LAN 模式仍使用一次性配对码和内存会话，但流量是局域网 HTTP，只应在可信网络使用。
 
-## 当前边界
+## 安全说明
 
-- Web 端提供持续报告、记录、聊天和数据源页面；原生端暂时保留记录和数据源。
-- 报告描述的是网页或接口当前可见并成功读取的记录，不保证覆盖抖音服务端未提供的更早历史，也不做心理诊断。
-- 仅使用记录中的显式作者、话题、音乐、时长和平台互动字段，不调用外部 AI 推测兴趣。
-- 暂不包含直播或影视综历史、收藏夹深度遍历、截图分享、PNG / PDF 导出。
-- 前台自动增量读取只响应应用前台事件，不自动定时运行或在应用关闭后常驻；仍属于可能随抖音页面变更而失效的实验能力。
+**重要提醒**：
 
-## 验证
+1. **仅限个人使用**：此工具只读取你本人登录账号当前可见的记录，请勿用于他人账号
+2. **登录态安全**：独立浏览器配置目录保存着抖音登录 Cookie，请妥善保管，不要拷贝或分享给他人
+3. **数据隐私**：本地记录和聊天快照包含个人隐私信息，请谨慎处理；仓库和安装包本身不含任何数据
+4. **合法使用**：请遵守相关法律法规和平台规则，不得用于非法目的
 
-```bash
-npm run typecheck
-npm test
-npm run build:web
-```
+## 免责声明
+
+请在充分理解以下内容，并自愿承担相应责任的前提下使用本项目：
+
+1. **项目性质**
+
+   本项目为独立开发的非官方开源工具，与抖音、字节跳动及其关联主体不存在隶属、授权、合作或认可关系。相关产品名称和商标归其权利人所有。
+
+2. **合法使用**
+
+   本项目仅可用于处理使用者本人合法持有、管理或已经取得明确授权访问的数据。使用者应遵守适用的法律法规、软件许可协议、平台规则和隐私保护义务。
+
+3. **数据与备份**
+
+   使用过程涉及本地记录、浏览器登录态、聊天快照和下载的视频文件。开始前请备份重要数据，并自行负责登录态保管、数据安全和隐私保护。
+
+4. **兼容性与运行风险**
+
+   抖音页面结构、接口格式或风控策略变化，可能导致读取失败、功能失效、账号提醒或其他不可预期结果。本项目不保证对未来抖音版本持续兼容。
+
+5. **责任范围**
+
+   本项目按现状提供，不对功能的准确性、完整性、稳定性或持续可用性作出明示或默示保证。在适用法律允许的范围内，因使用、误用、版本不兼容、操作中断或第三方策略变化产生的损失和后果，由使用者自行承担。
+
+使用或继续使用本项目，即表示使用者已经阅读、理解并同意以上内容，并愿意对自己的操作及其结果负责。
+
+## 致谢
+
+1. **[mafqla/douyin-api](https://github.com/mafqla/douyin-api)** — 固定版本签名器
+2. **[Expo](https://github.com/expo/expo)** / **[React Native](https://github.com/facebook/react-native)** / **[react-native-web](https://github.com/necolas/react-native-web)**
+3. **[Electron](https://github.com/electron/electron)** / **[electron-builder](https://github.com/electron-userland/electron-builder)**
+4. **[Playwright](https://github.com/microsoft/playwright)**
+5. **[lucide](https://github.com/lucide-icons/lucide)**
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request 来改进这个项目。
