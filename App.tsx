@@ -100,6 +100,8 @@ interface CollectorConnectionOptions {
 
 const TERMINAL_COLLECTOR_STATES = new Set(["idle", "complete", "partial", "error"]);
 
+// 无头直接读取报这些错时，只有跑一次页面采集（登录 + 抓模板）才能解决
+const PAGE_SYNC_REQUIRED_CODES = new Set(["login_required", "template_missing", "template_invalid", "session_incomplete"]);
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -202,6 +204,7 @@ function AppContent() {
   const chatCollectionInFlightRef = useRef(false);
   const chatPollRequestRef = useRef<number | null>(null);
 
+  const loginSyncTriggeredRef = useRef(false);
   useEffect(() => () => {
     pollRequest.current += 1;
     importRequest.current += 1;
@@ -389,6 +392,12 @@ function AppContent() {
             chatPollRequestRef.current = null;
           }
           if (chatStartupPendingRef.current && !chatCollectionInFlightRef.current) {
+          // 打开后第一次连上采集器，无头读取因为还没登录或还没抓到模板而失败：自动跑一次页面采集，把登录页弹出来；每次打开只试一次
+          if (status.state === "error" && PAGE_SYNC_REQUIRED_CODES.has(status.code ?? "") && !loginSyncTriggeredRef.current) {
+            loginSyncTriggeredRef.current = true;
+            void beginSync(baseUrl, token);
+            return;
+          }
             chatStartupPendingRef.current = false;
             void beginChatObservation(baseUrl, token);
           }

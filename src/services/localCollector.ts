@@ -34,6 +34,8 @@ export interface CollectorStatus {
   progress: CollectorProgress | null;
   updatedAt: string | null;
   browserOpen: boolean;
+  /** state 为 error 时的错误码，如 login_required */
+  code?: string | null;
 }
 
 export interface CollectorSnapshot {
@@ -557,6 +559,7 @@ function parseStatus(value: unknown): CollectorStatus {
     progress: parseCollectorProgress(value.progress),
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : null,
     browserOpen: value.browserOpen === true,
+    code: typeof value.code === "string" ? value.code : null,
   };
 }
 
