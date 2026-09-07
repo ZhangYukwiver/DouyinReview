@@ -88,7 +88,23 @@ npm run desktop
 npm run desktop:build
 ```
 
-安装器输出到 `release/ContentInsights-Setup-<version>.exe`。桌面版需要本机已安装 Google Chrome；采集记录保存在当前 Windows 用户的应用数据目录，应用升级不会覆盖。未签名的本地构建可能触发 Windows SmartScreen 提示。
+安装器输出到 `release/ContentInsights-Setup-<version>.exe`。桌面版需要本机已安装 Chrome、Edge、Brave 或 Chromium 中的任意一个（Windows 自带的 Edge 即可）；采集记录保存在当前 Windows 用户的应用数据目录，应用升级不会覆盖。未签名的本地构建可能触发 Windows SmartScreen 提示。
+
+## macOS 安装包
+
+在 Apple Silicon Mac 上生成可以直接分发的 DMG。安装包只含应用代码、Web 页面和已校验的签名器，不含本地记录、登录状态、浏览器配置或下载的视频：
+
+```bash
+npm run desktop:build:mac
+```
+
+输出到 `release/ContentInsights-<version>-arm64.dmg`。收到安装包的人把应用拖进“应用程序”即可，本机需要已安装 Chrome、Edge、Brave、Chromium 或 Comet 中的任意一个；采集记录保存在 `~/Library/Application Support/内容数据工作台/collector/`。这份构建没有 Apple 开发者签名，首次打开前需在终端执行一次：
+
+```bash
+xattr -cr "/Applications/内容数据工作台.app"
+```
+
+否则 macOS 会提示应用已损坏或无法验证开发者。
 
 ## 采集方式
 

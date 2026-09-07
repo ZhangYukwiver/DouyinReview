@@ -32,3 +32,6 @@ npm-debug.log*
 /scripts/shoot-daylight-frames.mjs
 /scripts/shoot-report-pages.mjs
 /visual-baseline/reference-*.jpg
+
+# AI 生成的图标草稿与提示词
+/output/

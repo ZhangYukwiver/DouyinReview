@@ -11,7 +11,7 @@
     "collector": "node collector/server.mjs",
     "direct:setup": "node scripts/setup-direct-signer.mjs",
     "direct:check": "node collector/directHistory.mjs --check-signer",
-    "app:mac": "osacompile -s -o '抖音年度回顾.app' scripts/macos-launcher.applescript && plutil -replace CFBundleIdentifier -string local.douyin.annual-recap '抖音年度回顾.app/Contents/Info.plist' && plutil -replace NSDocumentsFolderUsageDescription -string '读取同目录中的本地应用代码与年度回顾数据。' '抖音年度回顾.app/Contents/Info.plist' && codesign --force --deep --sign - '抖音年度回顾.app'",
+    "app:mac": "npm run build:icons && osacompile -s -o '抖音年度回顾.app' scripts/macos-launcher.applescript && plutil -replace CFBundleIdentifier -string local.douyin.annual-recap '抖音年度回顾.app/Contents/Info.plist' && plutil -replace NSDocumentsFolderUsageDescription -string '读取同目录中的本地应用代码与年度回顾数据。' '抖音年度回顾.app/Contents/Info.plist' && cp build/icon.icns '抖音年度回顾.app/Contents/Resources/applet.icns' && plutil -remove CFBundleIconName '抖音年度回顾.app/Contents/Info.plist' && codesign --force --deep --sign - '抖音年度回顾.app'",
     "build:icons": "node scripts/build-icons.mjs",
     "watch:process": "node scripts/process-watchdog.mjs",
     "typecheck": "tsc --noEmit",
@@ -22,7 +22,8 @@
     "desktop": "npm run build:web && electron desktop/main.mjs",
     "desktop:pack": "npm run build:web && npm run direct:setup && electron-builder --win dir",
     "desktop:build": "npm run build:web && npm run direct:setup && electron-builder --win nsis",
-    "sync:story": "node scripts/sync-story.mjs"
+    "sync:story": "node scripts/sync-story.mjs",
+    "desktop:build:mac": "npm run build:web && npm run direct:setup && electron-builder --mac"
   },
   "dependencies": {
     "@expo/metro-runtime": "~57.0.8",
@@ -66,7 +67,10 @@
       "dist/**/*",
       "build/icon.png",
       "node_modules/playwright-core/**/*",
-      "package.json"
+      "package.json",
+      "!**/*.test.mjs",
+      "!collector/fixtures/**",
+      "!node_modules/!(playwright-core)/**"
     ],
     "asar": true,
     "asarUnpack": [
@@ -78,7 +82,8 @@
         "from": ".local-data/direct-signer",
         "to": "direct-signer",
         "filter": [
-          "**/*"
+          "LICENSE",
+          "lib/runtime/bdms/**"
         ]
       }
     ],
@@ -106,6 +111,19 @@
       "installerHeaderIcon": "build/icon.ico",
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true
+    },
+    "afterPack": "scripts/mac-adhoc-sign.cjs",
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "artifactName": "ContentInsights-${version}-${arch}.${ext}"
     }
   }
 }

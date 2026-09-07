@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Content insights annual cycle">
-  <rect width="1024" height="1024" rx="224" fill="#17181A"/>
-  <circle cx="512" cy="512" r="292" fill="none" stroke="#F4F5F6" stroke-opacity="0.18" stroke-width="72"/>
-  <path d="M 270 674 A 292 292 0 1 1 755 350" fill="none" stroke="#D52D4C" stroke-linecap="round" stroke-width="78"/>
-  <circle cx="755" cy="350" r="42" fill="#D52D4C"/>
-  <rect x="330" y="515" width="96" height="180" rx="48" fill="#1594A5"/>
-  <rect x="464" y="400" width="96" height="295" rx="48" fill="#F4F5F6"/>
-  <rect x="598" y="470" width="96" height="225" rx="48" fill="#D4A33E"/>
-</svg>
