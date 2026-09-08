@@ -6,10 +6,12 @@
     <h1>douyin-annual-recap - 抖音本地采集与年度回顾工具</h1>
     <p>本地读取抖音观看、喜欢、收藏与聊天记录并生成持续更新的年度回顾，无界面增量读取，档案馆 / 内容年志两套版式，隐私优先，不接外部 AI</p>
     <p>完全本地运行：标题、作者、封面、Cookie 和报告都不会发送到任何外部分析服务。</p>
+    <p>问题反馈与交流请联系 QQ：940537208，或加入 QQ 群 DDDouyin（群号 1124211302）。</p>
     <img src="https://img.shields.io/github/v/tag/ZhangYukwiver/douyin-annual-recap" alt="Version" />
     <img src="https://img.shields.io/github/stars/ZhangYukwiver/douyin-annual-recap" alt="Stars" />
     <img src="https://img.shields.io/github/downloads/ZhangYukwiver/douyin-annual-recap/total" alt="Downloads" />
     <img src="https://img.shields.io/github/forks/ZhangYukwiver/douyin-annual-recap" alt="Forks" />
+    <a href="#加入群聊"><img src="https://img.shields.io/badge/QQ_Group-1124211302-12B7F5?logo=tencentqq&logoColor=white" alt="QQ Group" /></a>
     <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
     <img src="https://img.shields.io/badge/Expo-000020?logo=expo&logoColor=white" alt="Expo" />
     <img src="https://img.shields.io/badge/React_Native-20232A?logo=react&logoColor=61DAFB" alt="React Native" />
@@ -137,6 +139,14 @@
 | | 落款：一个正在成形的自己 |
 
 > 报告只使用记录中的显式作者、话题、音乐、时长和平台互动字段，不调用外部 AI 推测兴趣，也不做心理诊断。视频侧的"词条"只取显式话题标签，不做分词；聊天高频词用浏览器内置的 `Intl.Segmenter` 分词并先剔除平台模板消息，群聊正文不参与。
+
+## 加入群聊
+
+也欢迎加入下方 QQ 群「DDDouyin」（群号 1124211302）一起讨论，或直接联系 QQ 940537208。
+
+<p align="center">
+    <img src="docs/qq-group.jpg" alt="DDDouyin QQ 群二维码" width="360" />
+</p>
 
 ## 快速开始
 
