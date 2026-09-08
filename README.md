@@ -7,10 +7,10 @@
     <p>本地读取抖音观看、喜欢、收藏与聊天记录并生成持续更新的年度回顾，无界面增量读取，档案馆 / 内容年志两套版式，隐私优先，不接外部 AI</p>
     <p>完全本地运行：标题、作者、封面、Cookie 和报告都不会发送到任何外部分析服务。</p>
     <p>问题反馈与交流请联系 QQ：940537208，或加入 QQ 群 DDDouyin（群号 1124211302）。</p>
-    <img src="https://img.shields.io/github/v/tag/ZhangYukwiver/douyin-annual-recap" alt="Version" />
-    <img src="https://img.shields.io/github/stars/ZhangYukwiver/douyin-annual-recap" alt="Stars" />
-    <img src="https://img.shields.io/github/downloads/ZhangYukwiver/douyin-annual-recap/total" alt="Downloads" />
-    <img src="https://img.shields.io/github/forks/ZhangYukwiver/douyin-annual-recap" alt="Forks" />
+    <img src="https://img.shields.io/github/v/tag/ZhangYukwiver/DouyinReview" alt="Version" />
+    <img src="https://img.shields.io/github/stars/ZhangYukwiver/DouyinReview" alt="Stars" />
+    <img src="https://img.shields.io/github/downloads/ZhangYukwiver/DouyinReview/total" alt="Downloads" />
+    <img src="https://img.shields.io/github/forks/ZhangYukwiver/DouyinReview" alt="Forks" />
     <a href="#加入群聊"><img src="https://img.shields.io/badge/QQ_Group-1124211302-12B7F5?logo=tencentqq&logoColor=white" alt="QQ Group" /></a>
     <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
     <img src="https://img.shields.io/badge/Expo-000020?logo=expo&logoColor=white" alt="Expo" />
@@ -152,7 +152,7 @@
 
 ### 1. 下载桌面安装包（推荐）
 
-1. 打开 Release 页面（最新版）：https://github.com/ZhangYukwiver/douyin-annual-recap/releases/latest
+1. 打开 Release 页面（最新版）：https://github.com/ZhangYukwiver/DouyinReview/releases/latest
 2. Windows 下载 `ContentInsights-Setup-<version>.exe`；Apple Silicon Mac 下载 `ContentInsights-<version>-arm64.dmg`
 3. 本机需要已安装 Chrome、Edge、Brave、Chromium 或 Comet 中的任意一个（Windows 自带的 Edge 即可）
 4. 启动「内容数据工作台」，点击「连接采集器」；首次连接会弹出独立浏览器，在里面登录自己的抖音账号后会自动开始读取
@@ -164,8 +164,8 @@
 ### 2. 从源码运行（开发者 / 高级用户）
 
 ```bash
-git clone https://github.com/ZhangYukwiver/douyin-annual-recap.git
-cd douyin-annual-recap
+git clone https://github.com/ZhangYukwiver/DouyinReview.git
+cd DouyinReview
 npm install
 ```
 
