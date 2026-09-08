@@ -3,7 +3,7 @@
 </p>
 
 <div align="center">
-    <h1>douyin-annual-recap - 抖音本地采集与年度回顾工具</h1>
+    <h1>DouyinReview - 抖音本地采集与年度回顾工具</h1>
     <p>本地读取抖音观看、喜欢、收藏与聊天记录并生成持续更新的年度回顾，无界面增量读取，档案馆 / 内容年志两套版式，隐私优先，不接外部 AI</p>
     <p>完全本地运行：标题、作者、封面、Cookie 和报告都不会发送到任何外部分析服务。</p>
     <img src="https://img.shields.io/github/v/tag/ZhangYukwiver/douyin-annual-recap" alt="Version" />
