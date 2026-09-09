@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 
 import { DouyinCollector } from "./douyinCollector.mjs";
+import { ExplorerBridge } from "./explorerBridge.mjs";
 import { CollectorStore } from "./store.mjs";
 
 const DEFAULT_PORT = 4765;
@@ -241,6 +242,7 @@ export async function startCollectorServer({
   await chmod(dataDirectory, 0o700);
   const store = new CollectorStore(dataDirectory);
   const collector = new DouyinCollector({ executablePath, dataDirectory, signerDirectory, store });
+  const explorer = new ExplorerBridge(collector);
   await collector.initialize();
   const pairing = new PairingManager();
   const bindAddress = options.lan ? "0.0.0.0" : "127.0.0.1";
@@ -328,7 +330,41 @@ export async function startCollectorServer({
       return;
     }
 
-    if (request.method === "POST" && url.pathname === "/v1/downloads") {
+    if (request.method === "POST" && ["/v1/sync", "/v1/experimental/records-direct", "/v1/observe", "/v1/chat/observe", "/v1/downloads", "/v1/account/switch", "/v1/browser/close"].includes(url.pathname)) {
+      if (explorer.busy) {
+        sendJson(response, 409, { error: "collector_busy", message: "请等待当前探索操作完成后继续。" });
+        return;
+      }
+      // Release only the adapter's tabs before invoking an original workflow.
+      await explorer.close();
+    }
+
+    if (request.method === "POST" && ["/v1/explore/read", "/v1/explore/interact", "/v1/explore/video", "/v1/explore/close"].includes(url.pathname)) {
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      response.once("close", abort);
+      try {
+        const body = await readJsonBody(request);
+        const operation = url.pathname.split("/").at(-1);
+        if (operation === "close") {
+          if (!Array.isArray(body.sessionIds)) { sendJson(response, 400, { error: "invalid_request" }); return; }
+          await explorer.close(body.sessionIds);
+          sendJson(response, 200, { ok: true });
+        } else {
+          const result = await explorer.run(body, operation, controller.signal);
+          if (operation === "video") {
+            response.once("close", () => void result.dispose());
+            if (controller.signal.aborted) await result.dispose();
+            else await sendVideoFile(response, result.filePath, result.fileName);
+          } else if (!response.destroyed) sendJson(response, 200, result);
+        }
+      } catch (error) {
+        if (!response.destroyed) sendJson(response, error?.status ?? (error instanceof SyntaxError ? 400 : 409), {
+          error: error?.code ?? "explore_failed",
+          message: error?.code ? error.message : "页面读取失败，请检查抖音浏览器后重试。",
+        });
+      } finally { response.off("close", abort); }
+    } else if (request.method === "POST" && url.pathname === "/v1/downloads") {
       try {
         const body = await readJsonBody(request);
         const job = collector.startVideoDownload(body?.url);
@@ -431,6 +467,7 @@ export async function startCollectorServer({
     shuttingDown = true;
     for (const finish of statusWaiters) finish();
     try {
+      await explorer.close();
       await collector.close();
     } finally {
       await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

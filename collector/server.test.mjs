@@ -93,6 +93,16 @@ describe("collector server runtime", () => {
     });
     expect(unauthenticatedDownload.status).toBe(401);
 
+    for (const operation of ["read", "interact"]) {
+      const unauthorized = await fetch(`${runtime.baseUrl}/v1/explore/${operation}`, { method: "POST" });
+      expect(unauthorized.status).toBe(401);
+      const invalid = await fetch(`${runtime.baseUrl}/v1/explore/${operation}`, {
+        method: "POST", headers: { Authorization: `Bearer ${payload.token}`, "Content-Type": "application/json" }, body: JSON.stringify({ kind: "unsupported" }),
+      });
+      expect(invalid.status).toBe(400);
+      await expect(invalid.json()).resolves.toMatchObject({ error: "invalid_request" });
+    }
+
     const invalidDownload = await fetch(`${runtime.baseUrl}/v1/downloads`, {
       method: "POST",
       headers: {

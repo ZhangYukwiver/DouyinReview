@@ -335,7 +335,7 @@ function normalizeMediaType(item) {
   return null;
 }
 
-function normalizeAweme(item, recordType, historyDates) {
+export function normalizeAweme(item, recordType, historyDates) {
   if (!isObject(item)) return null;
   const author = firstObject(item, "author");
   const shareInfo = firstObject(item, "share_info");

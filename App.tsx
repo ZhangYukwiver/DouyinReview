@@ -69,6 +69,7 @@ import { shouldAutoSync } from "./src/services/autoSync";
 import { applyAppStyle, buildStoryEntryUrl, loadAppStyle, saveAppStyle, type AppStyle } from "./src/services/appStyle";
 import { buildStoryData, clearStoryData, writeStoryData } from "./src/services/storyData";
 import { buildReportModel } from "./src/components/workspace/ReportWorkspace";
+import { ExploreWorkspace } from "./src/components/workspace/ExploreWorkspace";
 
 type ViewKey = "summary" | "highlights" | "records" | "chat" | "sources";
 
@@ -167,10 +168,15 @@ function collectorErrorMessage(error: unknown): string {
   return error instanceof LocalCollectorError ? error.message : "本地采集服务暂时不可用。";
 }
 
+function opensExploreFromUrl(): boolean {
+  return Platform.OS === "web" && typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).get("workspace") === "explore";
+}
+
 function AppContent() {
-  const [activeView, setActiveView] = useState<ViewKey>("sources");
-  const [dashboardOpen, setDashboardOpen] = useState(false);
-  const [dashboardView, setDashboardView] = useState<LegacyWorkspaceViewKey>("summary");
+  const [activeView, setActiveView] = useState<ViewKey>(() => opensExploreFromUrl() ? "summary" : "sources");
+  const [dashboardOpen, setDashboardOpen] = useState(opensExploreFromUrl);
+  const [dashboardView, setDashboardView] = useState<LegacyWorkspaceViewKey>(() => opensExploreFromUrl() ? "explore" : "summary");
   const [privacy, setPrivacy] = useState(false);
   const [selectedArchive, setSelectedArchive] = useState<SelectedArchive | null>(null);
   const [pickingArchive, setPickingArchive] = useState(false);
@@ -206,6 +212,16 @@ function AppContent() {
   const chatCollectionInFlightRef = useRef(false);
   const chatPollRequestRef = useRef<number | null>(null);
   const loginSyncTriggeredRef = useRef(false);
+
+  // 只记录新增探索页的位置；刷新可直接回来，原有页面的启动流程保持不变。
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const exploring = activeView !== "sources" && dashboardOpen && dashboardView === "explore" && !storySrc;
+    if (exploring) url.searchParams.set("workspace", "explore");
+    else if (url.searchParams.get("workspace") === "explore") url.searchParams.delete("workspace");
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, "", url);
+  }, [activeView, dashboardOpen, dashboardView, storySrc]);
 
   useEffect(() => () => {
     pollRequest.current += 1;
@@ -1135,6 +1151,7 @@ function AppContent() {
         />
       ) : dashboardOpen || traceMode ? (
         <LegacyContentWorkspace
+          explore={<ExploreWorkspace connection={collectorToken ? { baseUrl: collectorUrl, token: collectorToken } : null} collectorBusy={collectorBusy} onOpenSettings={openSettings} onOpenRecord={openRecord} />}
           activeView={dashboardView}
           appStyle={appStyle}
           busy={collectorBusy}
