@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Image,
@@ -488,45 +488,21 @@ function ChatDetailPane({
 }) {
   const messageListRef = useRef<FlatList<ChatMessage>>(null);
   const stickToBottomRef = useRef(true);
-  const hasMeasuredContentRef = useRef(false);
-  const initialLayoutRef = useRef(true);
-  const initialLayoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const previousRowIdRef = useRef<string | null>(null);
 
-  // Reset the follow-latest behavior when switching conversations. This is a
-  // ref-only update so it happens before the new list can report its content
-  // size, while keeping hook order stable when the mobile empty state toggles.
-  const rowId = row?.id ?? null;
-  if (previousRowIdRef.current !== rowId) {
-    previousRowIdRef.current = rowId;
-    stickToBottomRef.current = true;
-    hasMeasuredContentRef.current = false;
-    initialLayoutRef.current = true;
-    if (initialLayoutTimerRef.current !== null) {
-      clearTimeout(initialLayoutTimerRef.current);
-      initialLayoutTimerRef.current = null;
+  // 网页端直接按 DOM 尺寸定位：FlatList 自带的 scrollToEnd 靠尚未量到的行高估算，
+  // 会先落在顶部再逐批往下跳。用内容容器的高度而不是 scrollHeight，入场动画的位移不会把它撑高。
+  const scrollToBottom = () => {
+    const node = messageListRef.current?.getScrollableNode?.();
+    if (typeof node?.scrollHeight !== "number") {
+      messageListRef.current?.scrollToEnd({ animated: false });
+      return;
     }
-  }
+    node.scrollTop = (node.firstElementChild?.offsetHeight ?? node.scrollHeight) - node.clientHeight;
+  };
 
-  const visibleMessageCount = row && row.kind !== "group"
-    ? Math.min(row.messages.length, CHAT_MESSAGE_RENDER_LIMIT)
-    : 0;
-  const latestMessageId = row?.messages[row.messages.length - 1]?.id ?? null;
-
-  // FlatList can finish measuring rows one frame after its first content-size
-  // notification. A short, cancellable follow-up makes the initial view land
-  // on the latest message without taking control back after the user scrolls.
-  useEffect(() => {
-    if (!row || row.kind === "group") return undefined;
-    const timers = [0, 80, 240, 480, 800].map((delay) => setTimeout(() => {
-      if (stickToBottomRef.current) messageListRef.current?.scrollToEnd({ animated: false });
-    }, delay));
-    return () => timers.forEach((timer) => clearTimeout(timer));
-  }, [latestMessageId, row?.kind, rowId, visibleMessageCount]);
-
-  useEffect(() => () => {
-    if (initialLayoutTimerRef.current !== null) clearTimeout(initialLayoutTimerRef.current);
-  }, []);
+  // 切换会话时本组件按会话 id 重新挂载：气泡在首次提交里一次渲染完（initialNumToRender），
+  // 绘制前就把列表拉到最新一条，不会先看到最早的消息再往下跳。
+  useLayoutEffect(scrollToBottom, []);
 
   if (!row) {
     return (
@@ -546,7 +522,6 @@ function ChatDetailPane({
     : row.messages;
   const omitted = row.messages.length - visibleMessages.length;
   const handleMessageScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (!hasMeasuredContentRef.current || initialLayoutRef.current) return;
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
     if (Number.isFinite(distanceFromBottom)) {
@@ -594,19 +569,9 @@ function ChatDetailPane({
           keyExtractor={(item) => item.id}
           ListEmptyComponent={<MessageListEmpty privacy={privacy} />}
           ListHeaderComponent={omitted > 0 ? <Text style={styles.messageLimitNotice}>仅显示最近 {CHAT_MESSAGE_RENDER_LIMIT} 条，另有 {omitted} 条更早消息保留在本地快照中。</Text> : <ConversationDateDivider />}
+          initialNumToRender={CHAT_MESSAGE_RENDER_LIMIT}
           onContentSizeChange={() => {
-            hasMeasuredContentRef.current = true;
-            if (initialLayoutRef.current) {
-              stickToBottomRef.current = true;
-              messageListRef.current?.scrollToEnd({ animated: false });
-              if (initialLayoutTimerRef.current !== null) clearTimeout(initialLayoutTimerRef.current);
-              initialLayoutTimerRef.current = setTimeout(() => {
-                initialLayoutRef.current = false;
-                initialLayoutTimerRef.current = null;
-              }, 350);
-            } else if (stickToBottomRef.current) {
-              messageListRef.current?.scrollToEnd({ animated: false });
-            }
+            if (stickToBottomRef.current) scrollToBottom();
           }}
           onScroll={handleMessageScroll}
           ref={messageListRef}
