@@ -41,8 +41,10 @@ import {
 } from "../../domain/chatRecords";
 import { alpha, workspaceColors as color, workspaceFonts as font, workspaceRadii as radius } from "./workspaceTheme";
 import { fx } from "./motion";
+import { splitChatEmoji } from "../../domain/chatEmoji";
 
 const webPointer = Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null;
+const webInlineEmoji = Platform.OS === "web" ? ({ verticalAlign: "text-bottom" } as object) : null;
 const CHAT_MESSAGE_RENDER_LIMIT = 320;
 
 type ChatFilter = "all" | "friend" | "group";
@@ -740,7 +742,7 @@ export function MessageContent({ message, onOpenRecord }: { message: ChatMessage
     // ordinary text-bubble path instead of showing a misleading play button.
     if (!hasChatShareEvidence(share)) {
       const text = message.text && !/^\[分享\]$/u.test(message.text) ? message.text : share.title;
-      return <Text style={styles.bubbleText}>{text ?? "文字消息"}</Text>;
+      return <Text style={styles.bubbleText}>{renderChatText(text ?? "文字消息")}</Text>;
     }
     const card = (
       <View style={styles.shareCard}>
@@ -781,7 +783,7 @@ export function MessageContent({ message, onOpenRecord }: { message: ChatMessage
         />
       );
     }
-    return <Text style={styles.stickerText}>{message.text && !/^\[表情包\]$/u.test(message.text) ? message.text : "表情包"}</Text>;
+    return <Text style={styles.stickerText}>{renderChatText(message.text && !/^\[表情包\]$/u.test(message.text) ? message.text : "表情包")}</Text>;
   }
   if (message.type === "image") {
     return <View style={styles.attachmentFallback}><ImageIcon color={color.cyan} size={17} /><Text style={styles.attachmentText}>图片消息</Text></View>;
@@ -789,7 +791,7 @@ export function MessageContent({ message, onOpenRecord }: { message: ChatMessage
   if (message.type === "unknown" && !message.text) {
     return <View style={styles.attachmentFallback}><FileText color={color.textMuted} size={16} /><Text style={styles.attachmentText}>暂未解析的消息</Text></View>;
   }
-  return <Text style={styles.bubbleText}>{message.text ?? chatPreview(message)}</Text>;
+  return <Text style={styles.bubbleText}>{renderChatText(message.text ?? chatPreview(message))}</Text>;
 }
 
 function ReadonlyComposer() {
@@ -858,6 +860,15 @@ function inferSelfId(messages: readonly ChatMessage[]): string | null {
 function isOwnMessage(message: ChatMessage, selfId: string | null): boolean {
   if (selfId && message.senderId === selfId) return true;
   return Boolean(message.senderName && /^(我|本人|自己)$/u.test(message.senderName.trim()));
+}
+
+// 抖音内置小表情以文字代码传输（如 [宕机]），按字典换成行内小图，没收录的原样显示。
+function renderChatText(text: string): React.ReactNode {
+  const parts = splitChatEmoji(text);
+  if (!parts.some((part) => "emoji" in part)) return text;
+  return parts.map((part, index) => "emoji" in part
+    ? <Image accessibilityLabel={part.emoji} key={index} source={{ uri: part.url }} style={[styles.inlineEmoji, webInlineEmoji]} />
+    : part.text);
 }
 
 function chatPreview(message: ChatMessage): string {
@@ -1041,6 +1052,7 @@ const styles = StyleSheet.create({
   bubbleOwn: { borderTopRightRadius: 4, backgroundColor: color.cyanSoft },
   bubbleSticker: { minHeight: 0, paddingHorizontal: 0, paddingVertical: 0, borderRadius: 0, backgroundColor: "transparent" },
   bubbleText: { color: color.text, fontSize: 12, lineHeight: 19 },
+  inlineEmoji: { width: 16, height: 16, marginHorizontal: 1 },
   messageTime: { color: color.textMuted, fontSize: 8, marginTop: 4, marginLeft: 3 },
   messageTimeOwn: { marginRight: 3 },
   systemMessage: { alignSelf: "center", maxWidth: "86%", color: color.textMuted, fontSize: 9, lineHeight: 15, textAlign: "center", marginBottom: 16, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.small, backgroundColor: color.surface },
