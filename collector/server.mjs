@@ -244,6 +244,28 @@ export async function startCollectorServer({
   await collector.initialize();
   const pairing = new PairingManager();
   const bindAddress = options.lan ? "0.0.0.0" : "127.0.0.1";
+  const statusWaiters = new Set();
+
+  const waitForStatus = (response, revision) => {
+    let timer;
+    let unsubscribe = () => undefined;
+    const cleanup = () => {
+      clearTimeout(timer);
+      unsubscribe();
+      statusWaiters.delete(finish);
+      response.off("close", cleanup);
+    };
+    const finish = (status = collector.getStatus()) => {
+      cleanup();
+      if (!response.destroyed && !response.writableEnded) sendJson(response, 200, status);
+    };
+    unsubscribe = collector.subscribeStatus(finish);
+    statusWaiters.add(finish);
+    response.once("close", cleanup);
+    timer = setTimeout(finish, 8_000);
+    const status = collector.getStatus();
+    if (status.revision !== revision) finish(status);
+  };
 
   const server = createServer(async (request, response) => {
     const origin = typeof request.headers.origin === "string" ? request.headers.origin : "";
@@ -349,7 +371,11 @@ export async function startCollectorServer({
         sendJson(response, 200, { job });
       }
     } else if (request.method === "GET" && url.pathname === "/v1/status") {
-      sendJson(response, 200, collector.getStatus());
+      const requestedRevision = url.searchParams.get("afterRevision");
+      if (requestedRevision === null) sendJson(response, 200, collector.getStatus());
+      else if (!/^\d+$/u.test(requestedRevision) || !Number.isSafeInteger(Number(requestedRevision))) {
+        sendJson(response, 400, { error: "invalid_revision" });
+      } else waitForStatus(response, Number(requestedRevision));
     } else if (request.method === "GET" && url.pathname === "/v1/records") {
       sendJson(response, 200, collector.getSnapshot());
     } else if (request.method === "POST" && url.pathname === "/v1/sync") {
@@ -403,6 +429,7 @@ export async function startCollectorServer({
   const shutdown = async () => {
     if (shuttingDown) return;
     shuttingDown = true;
+    for (const finish of statusWaiters) finish();
     try {
       await collector.close();
     } finally {

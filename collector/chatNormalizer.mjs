@@ -1218,6 +1218,117 @@ export function normalizeChatPayload(payload, context = {}) {
   };
 }
 
+const MAX_CHAT_FRAME_BYTES = 24 * 1024 * 1024;
+const SOCKET_RESPONSE_PATHS = new Map([
+  [301, "/v1/message/get_by_conversation"],
+  [2043, "/v1/message/get_message_by_init"],
+  [2048, "/v1/message/get_user_message"],
+  [211, "/v1/message/get_by_id"],
+]);
+
+function decompressChatLz4(input) {
+  let output = new Uint8Array(Math.min(MAX_CHAT_FRAME_BYTES, Math.max(1024, input.length * 4)));
+  let source = 0;
+  let target = 0;
+  const invalid = () => new CollectorAdapterError("invalid_response", "即时消息的压缩数据无效。");
+  const reserve = (length) => {
+    if (length > MAX_CHAT_FRAME_BYTES) throw new CollectorAdapterError("response_too_large", "即时消息解压后过大。");
+    if (length <= output.length) return;
+    const next = new Uint8Array(Math.min(MAX_CHAT_FRAME_BYTES, Math.max(length, output.length * 2)));
+    next.set(output);
+    output = next;
+  };
+  const lengthOf = (length) => {
+    if (length !== 15) return length;
+    let extra;
+    do {
+      if (source >= input.length) throw invalid();
+      extra = input[source++];
+      length += extra;
+      if (length > MAX_CHAT_FRAME_BYTES) throw invalid();
+    } while (extra === 255);
+    return length;
+  };
+  while (source < input.length) {
+    const token = input[source++];
+    const literals = lengthOf(token >> 4);
+    if (source + literals > input.length) throw invalid();
+    reserve(target + literals);
+    output.set(input.subarray(source, source + literals), target);
+    source += literals;
+    target += literals;
+    if (source === input.length) break;
+    if (source + 2 > input.length) throw invalid();
+    const offset = input[source] | input[source + 1] << 8;
+    source += 2;
+    if (offset === 0 || offset > target) throw invalid();
+    const length = lengthOf(token & 15) + 4;
+    reserve(target + length);
+    for (let index = 0; index < length; index += 1) {
+      output[target] = output[target - offset];
+      target += 1;
+    }
+  }
+  return output.subarray(0, target);
+}
+
+/** Decode incoming Frontier frames only; heartbeats and non-message commands are ignored. */
+export function normalizeChatSocketPayload(payload) {
+  if (typeof payload === "string") {
+    if (!payload.trim() || payload.trim() === "hi" || payload.trim() === "pong") return null;
+    if (payload.length > MAX_CHAT_FRAME_BYTES) throw new CollectorAdapterError("response_too_large", "即时消息响应过大。");
+    const value = JSON.parse(payload);
+    const notification = value?.body?.has_new_message_notify;
+    if (!notification?.message) return null;
+    const message = notification.message;
+    return normalizeChatPayload({ msgs: [{
+      ...message,
+      server_id: message.server_id ?? message.server_message_id,
+      sender_uid: message.sender_uid ?? message.sender,
+      type_code: message.type_code ?? message.message_type,
+      created_at: message.created_at ?? message.create_time,
+      content_json: message.content_json ?? message.content,
+    }] }, {
+      conversationId: notification.conversation_id,
+      conversationType: notification.conversation_type,
+    });
+  }
+  let bytes = toUint8Array(payload);
+  if (bytes.length > MAX_CHAT_FRAME_BYTES) throw new CollectorAdapterError("response_too_large", "即时消息响应过大。");
+  if (bytes.length === 2 && bytes[0] === 104 && bytes[1] === 105) return null;
+  if (bytes.length === 4 && decodeText(bytes) === "pong") return null;
+  // Frontier Frame: service=3, encoding=6, type=7, response payload=8.
+  const frame = readProtoFields(bytes);
+  const type = decodeText(firstField(frame, 7, 2)?.value);
+  const framedPayload = firstField(frame, 8, 2)?.value;
+  if (type === "pb" && framedPayload instanceof Uint8Array) {
+    const encoding = decodeText(firstField(frame, 6, 2)?.value);
+    if (encoding && encoding !== "__lz4") {
+      throw new CollectorAdapterError("schema_changed", "即时消息使用了暂不支持的压缩格式。");
+    }
+    bytes = encoding === "__lz4" ? decompressChatLz4(framedPayload) : framedPayload;
+  }
+  const response = readProtoFields(bytes);
+  const status = firstField(response, 3, 0)?.value ?? 0;
+  if (status !== 0) return null;
+  const command = firstField(response, 1, 0)?.value;
+  const body = firstField(response, 6, 2)?.value;
+  if (!(body instanceof Uint8Array)) return null;
+  const bodyFields = readProtoFields(body);
+  const notification = firstField(bodyFields, 500, 2)?.value;
+  if (notification instanceof Uint8Array) {
+    const fields = readProtoFields(notification);
+    const message = firstField(fields, 5, 2)?.value;
+    if (!(message instanceof Uint8Array)) return null;
+    return normalizeChatPayload({ msgs: [parseProtoMessage(message, {
+      id: decodeText(firstField(fields, 2, 2)?.value),
+      kind: normalizeConversationKind(firstField(fields, 3, 0)?.value),
+    })] });
+  }
+  const pathname = SOCKET_RESPONSE_PATHS.get(command);
+  return pathname ? normalizeChatPayload(bytes, { endpoint: { kind: "chat_messages", pathname } }) : null;
+}
+
 export class ChatMessageAccumulator {
   constructor(initialMessages = createEmptyChatMessages()) {
     this.messages = new Map();

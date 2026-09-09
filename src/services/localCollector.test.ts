@@ -134,6 +134,19 @@ describe("parseLaunchPairingCode", () => {
 });
 
 describe("local collector client", () => {
+  it("waits on revisions with header-only authentication and decodes the live connection state", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      state: "observing", phase: "chat_messages", revision: 8, chatConnection: "reconnecting", message: "正在重连",
+      counts: { watch_history: 0, liked_videos: 0, favorite_videos: 0, chat_messages: 2 },
+    })));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(getCollectorStatus("http://127.0.0.1:4765", "session-secret", 7))
+      .resolves.toMatchObject({ revision: 8, chatConnection: "reconnecting", phase: "chat_messages" });
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:4765/v1/status?afterRevision=7", expect.objectContaining({
+      headers: expect.objectContaining({ Authorization: "Bearer session-secret" }),
+    }));
+  });
+
   it("reads and validates the loopback pairing code", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "12345678" }), {
       status: 200,

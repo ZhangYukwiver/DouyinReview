@@ -36,6 +36,8 @@ export interface CollectorStatus {
   browserOpen: boolean;
   /** state 为 error 时的错误码，如 login_required */
   code?: string | null;
+  revision?: number;
+  chatConnection?: "connecting" | "connected" | "reconnecting" | null;
 }
 
 export interface CollectorSnapshot {
@@ -572,6 +574,9 @@ function parseStatus(value: unknown): CollectorStatus {
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : null,
     browserOpen: value.browserOpen === true,
     code: typeof value.code === "string" ? value.code : null,
+    ...(typeof value.revision === "number" && Number.isSafeInteger(value.revision) && value.revision >= 0 ? { revision: value.revision } : {}),
+    chatConnection: value.chatConnection === "connecting" || value.chatConnection === "connected" || value.chatConnection === "reconnecting"
+      ? value.chatConnection : null,
   };
 }
 
@@ -705,8 +710,9 @@ export async function pairCollector(baseUrl: string, code: string): Promise<stri
   return value.token;
 }
 
-export async function getCollectorStatus(baseUrl: string, token: string): Promise<CollectorStatus> {
-  return parseStatus(await requestJson(baseUrl, "/v1/status", {}, token));
+export async function getCollectorStatus(baseUrl: string, token: string, afterRevision?: number, signal?: AbortSignal): Promise<CollectorStatus> {
+  const query = afterRevision === undefined ? "" : `?afterRevision=${afterRevision}`;
+  return parseStatus(await requestJson(baseUrl, `/v1/status${query}`, { signal }, token));
 }
 
 export async function getCollectorRecords(baseUrl: string, token: string): Promise<CollectorSnapshot> {

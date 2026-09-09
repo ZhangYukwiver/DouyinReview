@@ -22,6 +22,7 @@ import {
   Mic,
   MoreHorizontal,
   Phone,
+  Pause,
   Play,
   Search,
   Send,
@@ -39,6 +40,7 @@ import {
   type ChatMessage,
   hasChatShareEvidence,
 } from "../../domain/chatRecords";
+import type { CollectorStatus } from "../../services/localCollector";
 import { alpha, workspaceColors as color, workspaceFonts as font, workspaceRadii as radius } from "./workspaceTheme";
 import { fx } from "./motion";
 import { splitChatEmoji } from "../../domain/chatEmoji";
@@ -55,6 +57,9 @@ export interface ChatWorkspaceProps {
   conversations: ChatConversationSummary[];
   privacy: boolean;
   busy: boolean;
+  connected?: boolean;
+  status?: CollectorStatus | null;
+  onToggleReception?: () => void;
   onOpenRecord: (url: string) => Promise<void>;
   onOpenSettings: () => void;
 }
@@ -176,6 +181,9 @@ export function ChatWorkspace({
   conversations,
   privacy,
   busy,
+  connected = false,
+  status = null,
+  onToggleReception,
   onOpenRecord,
   onOpenSettings,
 }: ChatWorkspaceProps) {
@@ -232,8 +240,34 @@ export function ChatWorkspace({
     if (mobile) setMobileDetail(true);
   };
 
+  const receiving = status?.phase === "chat_messages" && ["launching_browser", "observing"].includes(status.state);
+  const receptionLabel = !connected ? "未连接采集器"
+    : !receiving ? "已暂停接收"
+      : status?.chatConnection === "connected" ? "实时接收中"
+        : status?.chatConnection === "reconnecting" ? "连接中断，正在重连" : "正在连接消息";
+  const controlDisabled = connected && busy && !receiving;
+
   return (
-    <View style={[styles.root, mobile && styles.rootMobile]} testID="chat-workspace">
+    <View style={styles.workspace} testID="chat-workspace">
+      <View style={styles.receptionBar}>
+        <View style={styles.receptionCopy}>
+          <View style={[styles.receptionDot, { backgroundColor: receiving && status?.chatConnection === "connected" ? color.green : color.textMuted }]} />
+          <Text accessibilityLiveRegion="polite" style={styles.receptionLabel}>{receptionLabel}</Text>
+          {receiving && status?.progress ? <Text style={styles.receptionProgress}>整理历史 {status.progress.current}/{status.progress.total || "…"}</Text> : null}
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={!connected ? "连接采集器" : receiving ? "暂停接收" : "开始接收"}
+          accessibilityState={{ disabled: controlDisabled }}
+          disabled={controlDisabled}
+          onPress={!connected ? onOpenSettings : onToggleReception}
+          style={({ pressed }) => [styles.receptionButton, pressed && styles.pressed, controlDisabled && { opacity: 0.45 }, webPointer]}
+        >
+          {receiving ? <Pause color={color.textSecondary} size={13} /> : <Play color={color.textSecondary} size={13} />}
+          <Text style={styles.receptionButtonText}>{!connected ? "连接采集器" : receiving ? "暂停接收" : "开始接收"}</Text>
+        </Pressable>
+      </View>
+      <View style={[styles.root, mobile && styles.rootMobile]}>
       {!showDetail ? (
         <ChatListPane
           busy={busy}
@@ -283,6 +317,7 @@ export function ChatWorkspace({
           />
         </>
       )}
+      </View>
     </View>
   );
 }
@@ -331,7 +366,7 @@ function ChatListPane({
       <View style={styles.listHeader}>
         <View style={styles.listHeaderCopy}>
           <Text style={styles.chatTitle}>消息</Text>
-          <Text style={styles.chatSubtitle}>{allRows.length ? `${formatCount(allRows.length)} 个会话 · ${formatCount(totalMessages)} 条快照` : "本地聊天快照"}</Text>
+          <Text style={styles.chatSubtitle}>{allRows.length ? `${formatCount(allRows.length)} 个会话 · ${formatCount(totalMessages)} 条消息` : "消息会保存在本机"}</Text>
         </View>
         <Pressable
           accessibilityLabel="聚焦搜索聊天"
@@ -545,7 +580,7 @@ function ChatDetailPane({
         <View style={styles.detailHeaderActions}>
           <View style={styles.readonlyBadge}>
             <ShieldCheck color={color.green} size={13} strokeWidth={2} />
-            <Text style={styles.readonlyBadgeText}>本地快照</Text>
+            <Text style={styles.readonlyBadgeText}>本地保存</Text>
           </View>
           <Pressable accessibilityLabel="聊天详情" accessibilityRole="button" style={[styles.iconButton, webPointer]}>
             <MoreHorizontal color={color.textMuted} size={19} />
@@ -767,7 +802,7 @@ function ReadonlyComposer() {
         <ImageIcon color={color.textMuted} size={19} strokeWidth={1.8} />
         <Mic color={color.textMuted} size={19} strokeWidth={1.8} />
       </View>
-      <TextInput editable={false} placeholder="聊天记录为只读快照" placeholderTextColor={color.textMuted} style={styles.composerInput} />
+      <TextInput editable={false} placeholder="仅接收消息" placeholderTextColor={color.textMuted} style={styles.composerInput} />
       <View style={styles.composerSend}><Send color={color.textMuted} size={17} strokeWidth={1.8} /></View>
     </View>
   );
@@ -948,6 +983,14 @@ function Text({ style, ...rest }: TextProps) {
 }
 
 const styles = StyleSheet.create({
+  workspace: { flex: 1, minWidth: 0, minHeight: 0 },
+  receptionBar: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingHorizontal: 16, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.border, backgroundColor: color.sidebar },
+  receptionCopy: { flex: 1, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 7 },
+  receptionDot: { width: 6, height: 6, borderRadius: 3 },
+  receptionLabel: { color: color.textSecondary, fontSize: 11 },
+  receptionProgress: { color: color.textMuted, fontSize: 10 },
+  receptionButton: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 6, paddingHorizontal: 9, borderWidth: 1, borderColor: color.border, borderRadius: radius.medium },
+  receptionButtonText: { color: color.textSecondary, fontSize: 10 },
   root: { flex: 1, flexDirection: "row", minWidth: 0, minHeight: 0, backgroundColor: color.canvas },
   rootMobile: { flexDirection: "column" },
   listPane: { width: 334, flexShrink: 0, minHeight: 0, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: color.border, backgroundColor: color.sidebar },

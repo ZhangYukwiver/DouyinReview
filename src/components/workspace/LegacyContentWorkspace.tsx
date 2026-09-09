@@ -64,6 +64,8 @@ export interface ContentWorkspaceProps {
   records: PersonalRecordCollection;
   chatMessages?: ChatMessage[];
   chatConversations?: ChatConversationSummary[];
+  chatConnected?: boolean;
+  onToggleChatReception?: () => void;
   report: AnnualReport | LivingReport | null;
   sourceLabel: string;
   updatedAt: string | null;
@@ -120,6 +122,8 @@ export function ContentWorkspace({
   records,
   chatMessages = [],
   chatConversations = [],
+  chatConnected = false,
+  onToggleChatReception,
   report,
   sourceLabel,
   updatedAt,
@@ -329,6 +333,9 @@ export function ContentWorkspace({
         {activeView === "chat" ? (
           <ChatWorkspace
             busy={busy}
+            connected={chatConnected}
+            status={status}
+            onToggleReception={onToggleChatReception ?? onOpenSettings}
             conversations={chatConversations}
             messages={chatMessages}
             mobile={mobile}
