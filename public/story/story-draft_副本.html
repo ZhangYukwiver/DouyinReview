@@ -131,22 +131,167 @@
     main > section { scroll-snap-align: start; scroll-snap-stop: always; }
 
     /* ============ sky windows — illustrated interludes ============ */
-    .window { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 120px 8%; text-align: center; }
-    .window::before { content: ""; position: absolute; inset: 0; background: radial-gradient(58% 44% at 50% 54%, rgba(12,14,20,.34), transparent 72%); opacity: 0; transition: opacity .8s ease; }
-    .window[data-tone="light"]::before { background: radial-gradient(58% 44% at 50% 54%, rgba(254,255,252,.5), transparent 74%); }
+    /* ============ chapter gates — the teaser screen before each chapter: a stories-style progress bar, the statement, one figure and a few specimens ============ */
+    .window { position: relative; min-height: 100vh; display: grid; place-items: center; padding: 120px 8%; text-align: center; --wc: var(--cream); --wl: rgba(246,241,228,.34); --wg: rgba(255,255,255,.09); }
+    .window[data-tone="light"] { --wc: var(--ink); --wl: rgba(40,40,52,.3); --wg: rgba(255,255,255,.36); }
+    .window::before { content: ""; position: absolute; inset: 0; background: radial-gradient(92% 50% at 50% 54%, rgba(12,14,20,.30), transparent 76%); opacity: 0; transition: opacity .8s ease; }
+    .window[data-tone="light"]::before { background: radial-gradient(92% 50% at 50% 54%, rgba(254,255,252,.5), transparent 76%); }
     .window.in::before { opacity: 1; }
-    .window-copy { position: relative; max-width: 920px; }
-    .w-eyebrow { display: inline-flex; align-items: center; gap: 12px; margin-bottom: 26px; color: var(--cream); font: 400 10px var(--mono); letter-spacing: .3em; opacity: 0; transform: translateY(14px); transition: all .7s ease .1s; }
-    .window[data-tone="light"] .w-eyebrow { color: var(--charcoal); }
+    .window:not(.hero) { align-content: center; justify-items: start; row-gap: 34px; padding: 128px 8% 112px; text-align: left; overflow: hidden; }
+    /* watermark numeral: faint, oversized, running off the right edge */
+    .w-num { position: absolute; right: -3vw; top: 52%; z-index: 0; transform: translateY(-46%) scale(1.06); color: var(--wc); font: 300 min(42vw, 620px)/1 var(--serif); letter-spacing: -.07em; opacity: 0; pointer-events: none; transition: opacity 1.8s ease, transform 1.8s cubic-bezier(.2,.6,.2,1); }
+    .window.in .w-num { opacity: .075; transform: translateY(-46%); }
+    .window[data-tone="light"].in .w-num { opacity: .045; }
+    /* top frame: progress segments (the current one fills on arrival) + the bracket tag */
+    .w-frame { position: absolute; left: 8%; right: 8%; top: 108px; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 20px; color: var(--wc); font: 400 10px var(--mono); letter-spacing: .22em; opacity: 0; transform: translateY(-8px); transition: opacity .8s ease, transform .8s ease; }
+    .window.in .w-frame { opacity: .9; transform: none; }
+    .w-steps { display: flex; align-items: center; gap: 14px; }
+    .w-steps span { display: flex; gap: 5px; }
+    .w-steps i { position: relative; width: 34px; height: 2px; border-radius: 2px; background: var(--wl); overflow: hidden; }
+    .w-steps i.done { background: var(--wc); opacity: .75; }
+    .w-steps i.now::after { content: ""; position: absolute; inset: 0; background: var(--wc); transform: scaleX(0); transform-origin: 0 50%; transition: transform 1.4s cubic-bezier(.2,.6,.2,1) .2s; }
+    .window.in .w-steps i.now::after { transform: none; }
+    .w-steps b { font-weight: 400; }
+    .w-tag { opacity: .8; white-space: nowrap; }
+    /* the statement: eyebrow, two masked lines that rise one after the other, one line of context */
+    .window-copy { position: relative; z-index: 1; width: 100%; max-width: 760px; }
+    .w-eyebrow { display: inline-flex; align-items: center; gap: 12px; margin-bottom: 22px; color: var(--wc); font: 400 10px var(--mono); letter-spacing: .3em; opacity: 0; transform: translateY(14px); transition: all .7s ease .1s; }
+    .w-eyebrow::before { content: ""; width: 44px; height: 1px; background: currentColor; opacity: .5; }
     .window.in .w-eyebrow { opacity: .92; transform: none; }
-    .w-title { color: var(--cream); font: 300 clamp(32px, 4.1vw, 56px)/1.22 var(--serif); letter-spacing: -.02em; text-wrap: balance; opacity: 0; transform: translateY(22px); transition: all .9s cubic-bezier(.2,.6,.2,1) .18s; }
+    .w-title { color: var(--wc); font: 300 clamp(36px, 4.5vw, 64px)/1.16 var(--serif); letter-spacing: -.025em; }
     .w-title em { font-style: italic; font-weight: 400; }
     .w-title b { font-weight: 600; }
-    .window[data-tone="light"] .w-title { color: var(--ink); }
-    .window.in .w-title { opacity: 1; transform: none; }
-    .w-sub { margin-top: 20px; color: var(--cream); font-size: 14px; line-height: 1.8; opacity: 0; transform: translateY(16px); transition: all .8s ease .32s; }
-    .window[data-tone="light"] .w-sub { color: var(--charcoal); }
-    .window.in .w-sub { opacity: .85; transform: none; }
+    .w-title .ln { display: block; overflow: hidden; padding-bottom: .12em; margin-bottom: -.12em; }
+    .w-title .ln > span { display: block; transform: translateY(112%); transition: transform 1s cubic-bezier(.2,.7,.2,1) .14s; }
+    .w-title .ln:nth-child(2) > span { transition-delay: .26s; }
+    .window.in .w-title .ln > span { transform: none; }
+    .w-sub { max-width: 520px; margin-top: 22px; color: var(--wc); font-size: 15px; line-height: 1.8; opacity: 0; transform: translateY(16px); transition: all .8s ease .5s; }
+    .window.in .w-sub { opacity: .82; transform: none; }
+    /* ---- shared teaser primitives: one figure that sharpens as it counts, its label, glass chips ---- */
+    .w-fig { display: block; color: var(--wc); font: 300 clamp(64px, 8.6vw, 124px)/1 var(--serif); letter-spacing: -.045em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; opacity: 0; transform: translateY(18px) scale(.94); transform-origin: 0 100%; filter: blur(6px); transition: opacity .9s ease .35s, transform 1.1s cubic-bezier(.2,.7,.2,1) .35s, filter .9s ease .35s; }
+    .w-fig small { font-size: .42em; letter-spacing: 0; margin-left: .04em; }
+    .window.in .w-fig { opacity: 1; transform: none; filter: none; }
+    .w-fig-label { display: block; margin-top: -6px; color: var(--wc); font: 400 10px/1.7 var(--mono); letter-spacing: .18em; opacity: 0; transition: opacity .8s ease .6s; }
+    .window.in .w-fig-label { opacity: .78; }
+    .w-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .w-chips i { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border: 1px solid var(--wl); border-radius: 999px; background: var(--wg); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: var(--wc); font: 400 12px var(--sans); font-style: normal; letter-spacing: .01em; white-space: nowrap; opacity: 0; transform: translateY(12px); transition: opacity .6s ease calc(.55s + var(--i, 0) * 80ms), transform .7s cubic-bezier(.2,.7,.2,1) calc(.55s + var(--i, 0) * 80ms); }
+    .w-chips i b { font: 400 12px var(--mono); }
+    .w-chips .ava { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(255,255,255,.5); background: linear-gradient(160deg, #453e63, #d8ac96); background-size: cover; }
+    .window.in .w-chips i { opacity: 1; transform: none; }
+    /* centred gates (01 / 03 / 07) */
+    .window.g-row, .window.g-float, .window.g-colophon { justify-items: center; text-align: center; }
+    .g-row .window-copy, .g-float .window-copy, .g-colophon .window-copy { max-width: 880px; }
+    .g-row .w-sub, .g-float .w-sub, .g-colophon .w-sub { max-width: 640px; margin-left: auto; margin-right: auto; }
+    /* 01 · a row of four stream cards */
+    .w-streams { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; width: 100%; max-width: 1080px; }
+    .w-streams .st { display: grid; gap: 10px; padding: 22px 24px 20px; border: 1px solid var(--wl); border-radius: 20px; background: var(--wg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: var(--wc); text-align: left; opacity: 0; transform: translateY(16px); transition: opacity .7s ease calc(.4s + var(--i, 0) * 110ms), transform .8s cubic-bezier(.2,.7,.2,1) calc(.4s + var(--i, 0) * 110ms); }
+    .window.in .w-streams .st { opacity: 1; transform: none; }
+    .w-streams .st small { font: 400 9px var(--mono); letter-spacing: .22em; opacity: .75; }
+    .w-streams .st strong { font: 300 clamp(40px, 4vw, 60px)/1 var(--serif); letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+    .w-streams .st .bar { display: block; height: 2px; background: var(--wl); overflow: hidden; }
+    .w-streams .st .bar i { display: block; height: 100%; width: var(--w, 0%); background: var(--wc); transform: scaleX(0); transform-origin: 0 50%; transition: transform 1.2s cubic-bezier(.2,.7,.2,1) calc(.7s + var(--i, 0) * 110ms); }
+    .window.in .w-streams .st .bar i { transform: none; }
+    .w-streams .st em { font: 400 11px var(--sans); font-style: normal; opacity: .78; }
+    /* 02 · the peak hour set huge, twelve months across the width */
+    .window.g-clock { grid-template-columns: minmax(0, 1.1fr) auto; grid-template-areas: "copy clock" "months months" "chips chips"; column-gap: 6%; row-gap: 26px; align-items: end; }
+    .g-clock .window-copy { grid-area: copy; }
+    .w-clock { grid-area: clock; justify-self: end; text-align: right; }
+    .w-clock .w-fig { font-size: clamp(96px, 11vw, 158px); transform-origin: 100% 100%; }
+    .w-months { grid-area: months; display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; align-items: end; width: 100%; height: 132px; padding-top: 10px; border-top: 1px solid var(--wl); }
+    .mo { display: grid; grid-template-rows: 1fr auto; align-items: end; justify-items: center; height: 100%; gap: 8px; }
+    .mo i { display: block; width: 66%; height: var(--h, 10%); border-radius: 3px 3px 0 0; background: var(--wc); opacity: .42; transform: scaleY(0); transform-origin: 50% 100%; transition: transform .9s cubic-bezier(.2,.7,.2,1) calc(.35s + var(--i, 0) * 50ms); }
+    .mo.peak i { opacity: .95; }
+    .window.in .mo i { transform: none; }
+    .mo b { font: 400 9px var(--mono); letter-spacing: .1em; opacity: .6; }
+    .mo.peak b { opacity: 1; }
+    .g-clock .w-chips { grid-area: chips; }
+    /* 03 · the statement in the middle, real covers drifting around it */
+    .w-float { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+    .w-float .tile { position: absolute; width: 176px; height: 236px; border-radius: 16px; border: 1px solid rgba(255,255,255,.74); background: linear-gradient(160deg, #453e63 0%, #d8ac96 82%); background-size: cover; background-position: center; box-shadow: rgba(0,0,0,.28) 0 18px 40px; opacity: 0; transform: translateY(24px) scale(.92) rotate(var(--r, 0deg)); transition: opacity .8s ease calc(.3s + var(--i, 0) * 140ms), transform 1.1s cubic-bezier(.2,.7,.2,1) calc(.3s + var(--i, 0) * 140ms); }
+    .w-float .tile.c1 { background-image: linear-gradient(160deg, #2f5480 0%, #d29a4e 78%); }
+    .w-float .tile.c3 { background-image: linear-gradient(160deg, #162034 0%, #4c6a94 90%); }
+    .w-float .f1 { left: 9%; top: 21%; --r: -9deg; }
+    .w-float .f2 { right: 11%; top: 17%; width: 150px; height: 200px; --r: 7deg; }
+    .w-float .f3 { right: 19%; bottom: 17%; width: 164px; height: 220px; --r: -5deg; }
+    .w-float .tile.round { border-radius: 50%; }
+    .w-float .tile.c4 { background-image: linear-gradient(160deg, #612a26 0%, #e2a24e 84%); }
+    .w-float .a1 { left: 10%; top: 20%; width: 164px; height: 164px; }
+    .w-float .a2 { right: 12%; top: 16%; width: 124px; height: 124px; }
+    .w-float .a3 { right: 16%; bottom: 18%; width: 140px; height: 140px; }
+    .w-float .sc { left: 15%; bottom: 16%; width: 150px; height: 200px; --r: -6deg; }
+    .window.in .w-float .tile { opacity: 1; transform: rotate(var(--r, 0deg)); animation: hover-float 7s ease-in-out calc(1.5s + var(--i, 0) * .8s) infinite alternate; }
+    @keyframes hover-float { to { translate: 0 -10px; } }
+    .w-stat { display: grid; justify-items: center; gap: 14px; text-align: center; }
+    .w-stat .w-fig { font-size: clamp(72px, 9vw, 128px); transform-origin: 50% 100%; }
+    .w-stat .w-chips { justify-content: center; max-width: 600px; }
+    /* 03 · three rings sized by √count, overlapping around one point; the triple intersection sits where they meet */
+    .window.g-rings { grid-template-columns: minmax(0, 1fr) minmax(360px, 600px); column-gap: 4%; align-items: center; }
+    .g-rings .window-copy .w-chips { margin-top: 26px; }
+    .w-rings { position: relative; justify-self: end; width: 100%; color: var(--wc); }
+    .w-rings svg { display: block; width: 100%; height: auto; overflow: visible; }
+    .w-rings circle { fill: currentColor; fill-opacity: 0; stroke: currentColor; stroke-opacity: .85; stroke-width: 1.2; stroke-dasharray: 1; stroke-dashoffset: 1; transform: rotate(-90deg); transform-box: fill-box; transform-origin: center; transition: stroke-dashoffset 1.6s cubic-bezier(.2,.6,.2,1) calc(.3s + var(--i, 0) * .25s), fill-opacity 1s ease calc(1s + var(--i, 0) * .25s); }
+    .window.in .w-rings circle { stroke-dashoffset: 0; fill-opacity: .06; }
+    .w-rings text { fill: currentColor; font: 400 10px var(--mono); letter-spacing: .2em; opacity: 0; transition: opacity .8s ease calc(1.1s + var(--i, 0) * .25s); }
+    .window.in .w-rings text { opacity: .85; }
+    .w-rings .core { position: absolute; left: 57.4%; top: 58.5%; transform: translate(-50%, -50%); text-align: center; }
+    .w-rings .w-fig { font-size: clamp(60px, 6.6vw, 96px); transform-origin: 50% 100%; }
+    .w-rings .w-fig-label { margin-top: 2px; text-align: center; }
+    .w-cloud { display: flex; flex-wrap: wrap; align-items: baseline; gap: .05em .55em; width: 100%; max-width: 900px; color: var(--wc); font-family: var(--serif); font-weight: 300; line-height: 1.02; letter-spacing: -.03em; }
+    .wd { display: inline-flex; align-items: baseline; gap: .18em; font-size: calc(24px + var(--s, .5) * clamp(36px, 5.2vw, 76px)); opacity: 0; transform: translateY(.35em); transition: opacity .7s ease calc(.25s + var(--i, 0) * 80ms), transform .9s cubic-bezier(.2,.7,.2,1) calc(.25s + var(--i, 0) * 80ms); }
+    .window.in .wd { opacity: calc(.62 + var(--s, .5) * .38); transform: none; }
+    .wd b { font-weight: 300; }
+    .wd small { font: 400 10px var(--mono); letter-spacing: .12em; opacity: .7; }
+    /* 06 · a ledger card */
+    .g-ledger { grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr); column-gap: 6%; align-items: center; }
+    .w-ledger { justify-self: end; width: 100%; max-width: 430px; padding: 20px 22px 6px; border: 1px solid var(--wl); border-radius: 20px; background: var(--wg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: var(--wc); opacity: 0; transform: translateY(16px); transition: opacity .7s ease .3s, transform .8s cubic-bezier(.2,.7,.2,1) .3s; }
+    .window.in .w-ledger { opacity: 1; transform: none; }
+    .lg-head { display: flex; justify-content: space-between; margin-bottom: 18px; font: 400 9px var(--mono); letter-spacing: .22em; opacity: .75; }
+    .w-ledger .w-fig { font-size: clamp(56px, 6vw, 84px); }
+    .lg-rows { margin-top: 16px; }
+    .lr { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--wl); font: 400 12px var(--sans); opacity: 0; transform: translateX(-8px); transition: opacity .5s ease calc(.7s + var(--i, 0) * 110ms), transform .6s ease calc(.7s + var(--i, 0) * 110ms); }
+    .window.in .lr { opacity: 1; transform: none; }
+    .lr b { font: 400 12px var(--mono); }
+    /* 07 · the three-word signature inside a ring, like a title page */
+    .w-sig { position: relative; width: 280px; height: 280px; display: grid; align-content: center; justify-items: center; gap: 18px; text-align: center; color: var(--wc); }
+    .w-sig .ring { position: absolute; left: 50%; top: 50%; width: 280px; height: 280px; border: 1px solid var(--wl); border-radius: 50%; transform: translate(-50%, -50%) scale(.86); opacity: 0; transition: opacity 1.2s ease .3s, transform 1.4s cubic-bezier(.2,.7,.2,1) .3s; }
+    .window.in .w-sig .ring { opacity: 1; transform: translate(-50%, -50%); }
+    .w-sig small { font: 400 9px var(--mono); letter-spacing: .28em; opacity: 0; transition: opacity .8s ease 1.2s; }
+    .window.in .w-sig small { opacity: .8; }
+    .w-sig .slots { display: flex; gap: 20px; }
+    .w-sig .slots span { display: grid; gap: 10px; justify-items: center; font: 400 10px var(--mono); letter-spacing: .12em; opacity: 0; transition: opacity .7s ease calc(1.3s + var(--i, 0) * .15s); }
+    .window.in .w-sig .slots span { opacity: .82; }
+    .w-sig .slots i { width: 46px; height: 1px; background: currentColor; opacity: .65; transform: scaleX(0); transition: transform .7s ease calc(1.3s + var(--i, 0) * .15s); }
+    .window.in .w-sig .slots i { transform: none; }
+    /* the signals: dots swirl in from outside and settle on the ring */
+    .w-sig .dots { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+    .w-sig .dots i { position: absolute; left: -2px; top: -2px; width: 4px; height: 4px; border-radius: 50%; background: var(--wc); opacity: 0; transform: translate(var(--sx), var(--sy)); transition: transform 1.7s cubic-bezier(.2,.7,.2,1) calc(.2s + var(--i, 0) * 45ms), opacity .7s ease calc(.2s + var(--i, 0) * 45ms); }
+    .window.in .w-sig .dots i { opacity: .9; transform: translate(var(--x), var(--y)); animation: dot-breathe 3s ease-in-out calc(2.6s + var(--i, 0) * .13s) infinite alternate; }
+    @keyframes dot-breathe { from { opacity: .9; } to { opacity: .4; } }
+    .w-sig-note { margin: -6px 0 0; color: var(--wc); font: 400 15px var(--serif); opacity: 0; transition: opacity .8s ease 1.8s; }
+    .window.in .w-sig-note { opacity: .85; }
+    @media (max-height: 760px) {
+      .window:not(.hero) { row-gap: 22px; padding-top: 112px; padding-bottom: 96px; }
+      .w-title { font-size: clamp(32px, 3.8vw, 52px); }
+      .w-stat .w-fig { font-size: clamp(64px, 7vw, 96px); }
+      .w-clock .w-fig { font-size: clamp(80px, 9vw, 120px); }
+      .w-months { height: 100px; }
+      .w-float .tile { width: 132px; height: 176px; }
+      .w-float .f2 { width: 116px; height: 156px; }
+      .w-rings { max-width: 460px; }
+      .w-float .a1 { width: 124px; height: 124px; }
+      .w-float .a2 { width: 92px; height: 92px; }
+      .w-float .a3 { right: 14%; width: 104px; height: 104px; }
+      .w-float .sc { width: 112px; height: 150px; }
+      .wd { font-size: calc(20px + var(--s, .5) * clamp(28px, 4vw, 56px)); }
+      .w-sig { zoom: .86; }
+    }
+    /* foot: the chapter that follows, and the scroll cue */
+    .w-foot { position: absolute; left: 8%; right: 8%; bottom: 34px; z-index: 1; display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; color: var(--wc); opacity: 0; transform: translateY(8px); transition: opacity .8s ease .9s, transform .8s ease .9s; }
+    .window.in .w-foot { opacity: 1; transform: none; }
+    .w-next { display: grid; gap: 7px; font: 400 10px var(--mono); letter-spacing: .22em; opacity: .85; }
+    .w-next em { font: 400 16px var(--serif); letter-spacing: -.01em; }
+    .w-foot .scroll-cue { position: static; color: var(--wc); }
+    .w-foot .scroll-cue::after { background: linear-gradient(currentColor, transparent); }
 
     /* hero window */
     .hero { min-height: 100vh; align-items: end; text-align: left; place-items: end start; padding: 0 8% 11vh; }
@@ -325,7 +470,7 @@
     .card .open { margin-top: auto; padding-top: 12px; }
     .card.in:hover { transform: translateY(-3px); }
     .card-kind { position: absolute; right: 10px; top: 10px; padding: 3px 7px; border-radius: 4px; color: var(--cerulean); background: rgba(255,255,255,.78); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); font: 400 9px var(--mono); font-style: normal; letter-spacing: .1em; }
-    body.privacy-on .card-cover, body.privacy-on .avatar, body.privacy-on .ava, body.privacy-on .sc { filter: blur(12px) saturate(.4); }
+    body.privacy-on .card-cover, body.privacy-on .avatar, body.privacy-on .ava, body.privacy-on .sc, body.privacy-on .w-float .tile, body.privacy-on .w-chips .ava { filter: blur(12px) saturate(.4); }
     .privacy-text { user-select: none; }
     .privacy-run { display: contents; font: inherit; }
     .privacy-char { display: inline-block; inline-size: var(--privacy-width); font: inherit; font-family: var(--mono); letter-spacing: 0; text-align: center; }
@@ -587,6 +732,23 @@
       .bento { grid-template-columns: 1fr; }
       .bento-col:nth-child(2) { margin-top: 0; }
       .window { min-height: 78vh; }
+      .window:not(.hero) { row-gap: 26px; padding: 118px 8% 100px; }
+      .window.g-clock, .window.g-ledger, .window.g-rings { grid-template-columns: 1fr; grid-template-areas: none; }
+      .w-rings { justify-self: center; max-width: 400px; }
+      .g-clock .window-copy, .w-clock, .w-months, .g-clock .w-chips { grid-area: auto; }
+      .w-clock, .w-ledger { justify-self: start; text-align: left; }
+      .w-clock .w-fig { font-size: clamp(72px, 18vw, 110px); transform-origin: 0 100%; }
+      .w-months { height: 96px; }
+      .w-streams { grid-template-columns: 1fr 1fr; }
+      .w-float .tile { width: 64px; height: 86px; }
+      .w-float .f1 { left: 4%; top: 15%; }
+      .w-float .f2 { right: 5%; top: 13%; width: 56px; height: 76px; }
+      .w-float .f3, .w-float .a3, .w-float .sc { display: none; }
+      .w-float .a1 { left: 4%; top: 14%; width: 64px; height: 64px; }
+      .w-float .a2 { right: 5%; top: 12%; width: 52px; height: 52px; }
+      .w-num, .w-tag { display: none; }
+      .w-steps i { width: 22px; }
+      .w-frame { top: 84px; }
       .chapter { height: auto; }
       .chapter-inner { transform: none; }
       .roll-stage { height: 100vh; }
@@ -654,11 +816,18 @@
     </section>
 
     <!-- ( 01 ) 样本 -->
-    <section class="window" data-skystate="1" data-tone="light" id="w-sample">
+    <section class="window g-row" data-skystate="1" data-tone="light" id="w-sample">
+      <span class="w-tag">[ <span data-slot="streams-n">4</span> STREAMS ]</span>
       <div class="window-copy">
-        <p class="w-eyebrow">( 01 ) · THE SAMPLE · [ <span data-slot="streams-n">4</span> STREAMS ]</p>
-        <h2 class="w-title">你留下的，<em>不只是</em>播放记录。</h2>
-        <p class="w-sub">四条数据流在同一片天空下汇合。</p>
+        <p class="w-eyebrow">( 01 ) · THE SAMPLE</p>
+        <h2 class="w-title"><span class="ln"><span>你留下的，</span></span><span class="ln"><span><em>不只是</em>播放记录。</span></span></h2>
+        <p class="w-sub">四条数据流在同一片天空下汇合，<span data-slot="g1-total">一共 34 条记录，去重后 21 个内容</span>。</p>
+      </div>
+      <div class="w-streams" data-slot="g1-streams">
+        <div class="st"><small>WATCH · 看过</small><strong data-count="20">0</strong><span class="bar"><i style="--w:100%"></i></span><em>占四条流的 59%</em></div>
+        <div class="st"><small>LIKED · 喜欢</small><strong data-count="8">0</strong><span class="bar"><i style="--w:40%"></i></span><em>占四条流的 24%</em></div>
+        <div class="st"><small>FAVORITE · 收藏</small><strong data-count="6">0</strong><span class="bar"><i style="--w:30%"></i></span><em>占四条流的 18%</em></div>
+        <div class="st"><small>CHAT · 聊天</small><strong>—</strong><span class="bar"><i style="--w:0%"></i></span><em>备用文件不含聊天</em></div>
       </div>
     </section>
 
@@ -701,12 +870,19 @@
     </section>
 
     <!-- ( 02 ) 时间 -->
-    <section class="window" data-skystate="1" data-tone="light" id="w-time">
+    <section class="window g-clock" data-skystate="1" data-tone="light" id="w-time">
+      <span class="w-tag">[ ASIA/SHANGHAI ]</span>
       <div class="window-copy">
-        <p class="w-eyebrow">( 02 ) · WHEN YOU ARRIVED · [ ASIA/SHANGHAI ]</p>
-        <h2 class="w-title">时间把偏好，写成<em>一条起伏的线</em>。</h2>
+        <p class="w-eyebrow">( 02 ) · WHEN YOU ARRIVED</p>
+        <h2 class="w-title"><span class="ln"><span>时间把偏好，</span></span><span class="ln"><span>写成<em>一条起伏的线</em>。</span></span></h2>
         <p class="w-sub">只有带可靠行为时间的记录，才会进入时间轴。</p>
       </div>
+      <div class="w-clock">
+        <strong class="w-fig" data-slot="g2-hour">15:00</strong>
+        <span class="w-fig-label">最常出现的时辰 · PEAK HOUR</span>
+      </div>
+      <div class="w-months" data-slot="g2-months" aria-hidden="true"><div class="mo" style="--h:22%"><i></i><b>1</b></div><div class="mo" style="--h:38%"><i></i><b>2</b></div><div class="mo" style="--h:52%"><i></i><b>3</b></div><div class="mo" style="--h:65%"><i></i><b>4</b></div><div class="mo" style="--h:72%"><i></i><b>5</b></div><div class="mo" style="--h:56%"><i></i><b>6</b></div><div class="mo" style="--h:42%"><i></i><b>7</b></div><div class="mo peak" style="--h:88%"><i></i><b>8</b></div><div class="mo" style="--h:60%"><i></i><b>9</b></div><div class="mo" style="--h:48%"><i></i><b>10</b></div><div class="mo" style="--h:33%"><i></i><b>11</b></div><div class="mo" style="--h:26%"><i></i><b>12</b></div></div>
+      <div class="w-chips" data-slot="g2-chips"><i>活跃 <b>28</b> 天</i><i>最密集的一天 <b>2025-05-05</b></i><i>从 <b>01-03</b> 到 12-20</i></div>
     </section>
 
     <section class="chapter" id="time" data-wash="dawn">
@@ -754,11 +930,18 @@
     </section>
 
     <!-- ( 03 ) 留下 -->
-    <section class="window" data-skystate="2" data-tone="dark" id="w-kept">
+    <section class="window g-rings" data-skystate="2" data-tone="dark" id="w-kept">
+      <span class="w-tag">[ STABLE IDS ONLY ]</span>
       <div class="window-copy">
-        <p class="w-eyebrow">( 03 ) · WHAT STAYED · [ STABLE IDS ONLY ]</p>
-        <h2 class="w-title">真正留下来的，都经过<em>两次选择</em>。</h2>
+        <p class="w-eyebrow">( 03 ) · WHAT STAYED</p>
+        <h2 class="w-title"><span class="ln"><span>真正留下来的，</span></span><span class="ln"><span>都经过<em>两次选择</em>。</span></span></h2>
         <p class="w-sub">看过、喜欢、收藏三个环，只靠稳定的作品 ID 相扣。</p>
+        <div class="w-chips" data-slot="g3-chips"><i>看过 × 喜欢 <b>8</b></i><i>看过 × 收藏 <b>5</b></i><i>看完的 <b>42%</b></i></div>
+      </div>
+      <div class="w-rings">
+        <svg viewBox="-130 0 680 410" data-slot="g3-rings" aria-hidden="true"></svg>
+        <div class="core"><strong class="w-fig" data-count="5">0</strong></div>
+        <span class="w-fig-label">看过、喜欢、收藏都有的内容 · ALL THREE</span>
       </div>
     </section>
 
@@ -817,12 +1000,21 @@
     </section>
 
     <!-- ( 04 ) 组成 -->
-    <section class="window" data-skystate="2" data-tone="dark" id="w-mix">
+    <section class="window g-cloud" data-skystate="2" data-tone="dark" id="w-mix">
+      <span class="w-tag">[ TOPICS · CREATORS · MEDIA · DURATION · MUSIC ]</span>
       <div class="window-copy">
-        <p class="w-eyebrow">( 04 ) · THE MIX · [ TOPICS · CREATORS · MEDIA · DURATION · MUSIC ]</p>
-        <h2 class="w-title">你选的内容，有自己的<em>质地</em>。</h2>
+        <p class="w-eyebrow">( 04 ) · THE MIX</p>
+        <h2 class="w-title"><span class="ln"><span>你选的内容，</span></span><span class="ln"><span>有自己的<em>质地</em>。</span></span></h2>
         <p class="w-sub">话题聚成星群，创作者留下轨迹。</p>
       </div>
+      <div class="w-cloud" data-slot="g4-cloud">
+        <span class="wd" style="--s:1"><b>#城市散步</b><small>6</small></span>
+        <span class="wd" style="--s:.7"><b>#手作</b><small>4</small></span>
+        <span class="wd" style="--s:.55"><b>#家常菜</b><small>3</small></span>
+        <span class="wd" style="--s:.55"><b>#摄影</b><small>3</small></span>
+        <span class="wd" style="--s:.3"><b>#植物</b><small>1</small></span>
+      </div>
+      <div class="w-chips" data-slot="g4-chips"><i><span class="ava"></span>示例创作者甲 <b>6</b> 个作品</i><i>视频 <b>78%</b></i></div>
     </section>
 
     <section class="chapter" id="mix" data-wash="dusk">
@@ -916,11 +1108,18 @@
     </section>
 
     <!-- ( 05 ) 回声 -->
-    <section class="window" data-skystate="3" data-tone="dark" id="w-echo">
+    <section class="window g-float g-echo" data-skystate="3" data-tone="dark" id="w-echo">
+      <span class="w-tag">[ CHAT · ONE-TIME READ ]</span>
+      <div class="w-float" aria-hidden="true"><i class="tile round c3 a1"></i><i class="tile round a2"></i><i class="tile round c4 a3"></i><i class="tile c1 sc"></i></div>
       <div class="window-copy">
-        <p class="w-eyebrow">( 05 ) · THE ECHO · [ CHAT · ONE-TIME READ ]</p>
-        <h2 class="w-title">内容之外，还有<em>朋友的回声</em>。</h2>
+        <p class="w-eyebrow">( 05 ) · THE ECHO</p>
+        <h2 class="w-title"><span class="ln"><span>内容之外，</span></span><span class="ln"><span>还有<em>朋友的回声</em>。</span></span></h2>
         <p class="w-sub">夜空下，消息只留下形态和时间。</p>
+      </div>
+      <div class="w-stat">
+        <strong class="w-fig">—</strong>
+        <span class="w-fig-label">好友消息 · 待采集 · FRIEND MESSAGES</span>
+        <div class="w-chips" data-slot="g5-chips"><i>文字</i><i>图片</i><i>分享</i><i>表情</i><i>通话 / 语音</i></div>
       </div>
     </section>
 
@@ -984,11 +1183,24 @@
     </section>
 
     <!-- ( 06 ) 证据 -->
-    <section class="window" data-skystate="3" data-tone="dark" id="w-evidence">
+    <section class="window g-ledger" data-skystate="3" data-tone="dark" id="w-evidence">
+      <span class="w-tag">[ EVIDENCE LEDGER ]</span>
       <div class="window-copy">
-        <p class="w-eyebrow">( 06 ) · HOW WE KNOW · [ EVIDENCE LEDGER ]</p>
-        <h2 class="w-title">故事的边界，也是<em>故事的一部分</em>。</h2>
+        <p class="w-eyebrow">( 06 ) · HOW WE KNOW</p>
+        <h2 class="w-title"><span class="ln"><span>故事的边界，</span></span><span class="ln"><span>也是<em>故事的一部分</em>。</span></span></h2>
         <p class="w-sub">每个数字，都能翻回它的原始账目。</p>
+      </div>
+      <div class="w-ledger">
+        <div class="lg-head"><span>EVIDENCE LEDGER</span><span data-slot="g6-year">2025</span></div>
+        <strong class="w-fig" data-count="97">0<small>%</small></strong>
+        <span class="w-fig-label">带可靠行为时间的记录 · RELIABLE</span>
+        <div class="lg-rows" data-slot="g6-rows">
+          <div class="lr"><span>来源</span><b>备用文件</b></div>
+          <div class="lr"><span>没有行为时间</span><b>1 条</b></div>
+          <div class="lr"><span>没有作品 ID</span><b>1 条</b></div>
+          <div class="lr"><span>有覆盖率的字段</span><b>7 项</b></div>
+          <div class="lr"><span>采集器警告</span><b>0 条</b></div>
+        </div>
       </div>
     </section>
 
@@ -1033,12 +1245,20 @@
     </section>
 
     <!-- ( 07 ) 签名 -->
-    <section class="window" data-skystate="4" data-tone="dark" id="w-signature">
+    <section class="window g-colophon" data-skystate="4" data-tone="dark" id="w-signature">
+      <span class="w-tag">[ SEAL &amp; COLOPHON ]</span>
       <div class="window-copy">
-        <p class="w-eyebrow">( 07 ) · THE SIGNATURE · [ SEAL & COLOPHON ]</p>
-        <h2 class="w-title">信号聚拢，<em>为这一年落款</em>。</h2>
+        <p class="w-eyebrow">( 07 ) · THE SIGNATURE</p>
+        <h2 class="w-title"><span class="ln"><span>信号聚拢，</span></span><span class="ln"><span><em>为这一年落款</em>。</span></span></h2>
         <p class="w-sub">所有星点，归拢成一枚印章。</p>
       </div>
+      <div class="w-sig">
+        <i class="ring" aria-hidden="true"></i>
+        <span class="dots" aria-hidden="true"></span>
+        <small data-slot="g7-year">2026 · SIGNATURE</small>
+        <div class="slots"><span><i></i>时候</span><span><i></i>看的是什么</span><span><i></i>留下什么</span></div>
+      </div>
+      <p class="w-sig-note">三个词，要翻到下一页才落下。</p>
     </section>
 
     <section class="chapter colophon" id="signature" data-wash="ember">
@@ -1172,11 +1392,11 @@
       el.dataset.done = 1;
       const end = +el.dataset.count;
       const keep = $("small", el);
-      if (reduced || !end) { el.childNodes[0].textContent = end; return; }
+      if (reduced || !end) { el.childNodes[0].textContent = (+end).toLocaleString("zh-CN"); return; }
       const t0 = performance.now();
       (function tick(now) {
         const p = Math.min(1, (now - t0) / 1100);
-        el.childNodes[0].textContent = Math.round(end * ease(p));
+        el.childNodes[0].textContent = Math.round(end * ease(p)).toLocaleString("zh-CN");
         if (p < 1) requestAnimationFrame(tick);
       })(t0);
     }
@@ -1317,6 +1537,57 @@
     // the painted gradient stays underneath, so a cover that fails to load never leaves a white hole
     const cover = (el, url) => { if (!el || !url) return; const prev = getComputedStyle(el).backgroundImage; el.classList.add("real"); el.style.backgroundImage = `url("${String(url).replace(/"/g, "%22")}")${prev && prev !== "none" ? `, ${prev}` : ""}`; el.style.backgroundSize = "cover"; el.style.backgroundPosition = "center"; };
     const el = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
+
+    /* ---------- chapter gates: the frame (progress segments + bracket tag), the watermark numeral and the "next" line are built here;
+       each gate's figure and chips live in its HTML and are refilled by hydrate ---------- */
+    const gates = windows.filter((w) => !w.classList.contains("hero"));
+    const stagger = (box) => { if (box) [...box.children].forEach((n, i) => n.style.setProperty("--i", i)); };
+    gates.forEach((w, i) => {
+      const n = String(i + 1).padStart(2, "0");
+      const h2 = w.nextElementSibling && w.nextElementSibling.querySelector(".ch-head h2");
+      const label = railBtns[i] ? railBtns[i].querySelector("span").textContent : n;
+      const frame = el("div", "w-frame"), steps = el("span", "w-steps"), bar = el("span");
+      gates.forEach((_, k) => bar.append(el("i", k < i ? "done" : k === i ? "now" : "")));
+      steps.append(bar, el("b", "", `${n} / ${String(gates.length).padStart(2, "0")}`));
+      frame.append(steps, $(".w-tag", w) || el("span", "w-tag"));
+      const foot = el("div", "w-foot"), next = el("span", "w-next");
+      next.append(el("span", "", `NEXT ↓ · ${label}`), el("em", "", h2 ? h2.textContent : ""));
+      foot.append(next, el("span", "scroll-cue", "SCROLL"));
+      const num = el("span", "w-num", n);
+      num.setAttribute("aria-hidden", "true");
+      w.prepend(num, frame);
+      w.append(foot);
+      $$(".w-chips, .w-streams, .w-months, .w-float, .w-cloud, .lg-rows, .slots", w).forEach(stagger);
+    });
+    /* 07 · 26 signal dots: each ends on the ring (r 140) and starts further out, a little ahead in angle, so they swirl in; arrival order is scattered */
+    { const box = $("#w-signature .dots"), N = 26;
+      for (let i = 0; i < N; i++) {
+        const a = i / N * Math.PI * 2 - Math.PI / 2, far = 240 + (i * 53) % 150, dot = el("i");
+        dot.style.setProperty("--x", `${(Math.cos(a) * 140).toFixed(1)}px`); dot.style.setProperty("--y", `${(Math.sin(a) * 140).toFixed(1)}px`);
+        dot.style.setProperty("--sx", `${(Math.cos(a + .7) * far).toFixed(1)}px`); dot.style.setProperty("--sy", `${(Math.sin(a + .7) * far).toFixed(1)}px`);
+        dot.style.setProperty("--i", (i * 7) % N);
+        box.append(dot);
+      } }
+    /* 03 · rings: radius by √count (largest = 150), each centre pulled a little toward its own side so all three share one point; labels sit outside */
+    function drawRings(svg, items) {
+      const NS = "http://www.w3.org/2000/svg", max = Math.max(1, ...items.map((it) => it[1] || 0));
+      const angles = [205, 335, 90], labelAt = [160, 20, 95], C = [260, 240];
+      svg.textContent = "";
+      items.forEach(([label, count], i) => {
+        const r = Math.max(36, Math.round(190 * Math.sqrt((count || 0) / max)));
+        const a = angles[i] * Math.PI / 180, cx = C[0] + 0.48 * r * Math.cos(a), cy = C[1] + 0.48 * r * Math.sin(a);
+        const c = document.createElementNS(NS, "circle");
+        [["cx", cx], ["cy", cy], ["r", r], ["pathLength", 1]].forEach(([k, v]) => c.setAttribute(k, v));
+        c.style.setProperty("--i", i);
+        const la = labelAt[i] * Math.PI / 180, lx = cx + (r + 16) * Math.cos(la), ly = cy + (r + 16) * Math.sin(la);
+        const t = document.createElementNS(NS, "text");
+        [["x", lx], ["y", ly], ["text-anchor", Math.cos(la) < -0.3 ? "end" : Math.cos(la) > 0.3 ? "start" : "middle"], ["dominant-baseline", "middle"]].forEach(([k, v]) => t.setAttribute(k, v));
+        t.textContent = `${label} · ${(count || 0).toLocaleString("zh-CN")}`;
+        t.style.setProperty("--i", i);
+        svg.append(c, t);
+      });
+    }
+    drawRings($('[data-slot="g3-rings"]'), [["看过", 20], ["喜欢", 8], ["收藏", 6]]);
 
     /* ---------- 04 · roll: one sticky screen; every scrolled pixel slides the roll ROLL_SPEED pixels left.
        Each panel is set like the reference screen: one headline across the width — two tags in a line, the way "District Eindhoven"
@@ -1642,6 +1913,65 @@
       }
       const caveat = $("#caveat");
       if (caveat) { caveat.textContent = ""; caveat.append(el("b", "", "CAVEATS / 当前边界"), el("br"), `${num(d.caveats.noTime)} 条记录没有可用行为时间，不参与时间轴；${num(d.caveats.noVideoId)} 条没有稳定作品 ID 的记录仍保留在原清单，但不参与交集计算；${d.caveats.warnings ? `采集器警告 ${num(d.caveats.warnings)} 条，原文见工作台。` : "没有采集器警告。"}${LX && LX.chat && LX.chat.excluded ? `聊天高频词剔除了 ${num(LX.chat.excluded)} 条平台模板（同一文案出现在三个以上会话）；群聊正文不参与。` : ""}`); }
+
+      /* chapter gates: each one teases the chapter after it, in its own arrangement */
+      const fill = (name, value) => { const node = S(name); if (node) node.textContent = value; };
+      const count = (node, v) => { if (!node) return; if (v === null || v === undefined) { delete node.dataset.count; node.childNodes[0].textContent = "—"; } else { node.dataset.count = v; node.childNodes[0].textContent = "0"; } };
+      const chips = (name, list) => { const box = S(name); if (!box) return; box.textContent = ""; list.filter(Boolean).forEach(([k, v, t, ava]) => { const chip = el("i"); if (ava !== undefined) { const a = el("span", "ava"); cover(a, ava); chip.append(a); } chip.append(k ? `${k} ` : ""); if (v !== undefined && v !== null && v !== "") chip.append(el("b", "", v)); if (t) chip.append(` ${t}`); box.append(chip); }); stagger(box); };
+      const md = (iso) => (iso || "").slice(5);
+      /* 01 · four stream cards */
+      { const base = Math.max(1, c.watch + c.liked + c.favorite + (c.chat || 0));
+        fill("g1-total", `一共 ${num(c.events)} 条记录，去重后 ${num(d.unique)} 个内容`);
+        const rows = [["WATCH · 看过", c.watch], ["LIKED · 喜欢", c.liked], ["FAVORITE · 收藏", c.favorite], ["CHAT · 聊天", c.chat]];
+        const max = Math.max(1, ...rows.map((r) => r[1] || 0));
+        const box = S("g1-streams"); box.textContent = "";
+        rows.forEach(([label, v]) => {
+          const st = el("div", "st"), strong = el("strong", "", "0"), bar = el("span", "bar"), i = el("i");
+          count(strong, v); i.style.setProperty("--w", `${v ? Math.max(3, Math.round(v / max * 100)) : 0}%`); bar.append(i);
+          st.append(el("small", "", label), strong, bar, el("em", "", v === null ? "备用文件不含聊天" : `占四条流的 ${pct(v / base)}`));
+          box.append(st);
+        });
+        stagger(box); }
+      /* 02 · peak hour + twelve months */
+      fill("g2-hour", d.peakHour === null ? "—" : `${String(d.peakHour).padStart(2, "0")}:00`);
+      { const box = S("g2-months"); box.textContent = "";
+        d.months.forEach((v, i) => { const mo = el("div", peaks.includes(i) ? "mo peak" : "mo"); mo.style.setProperty("--h", `${v ? Math.max(4, Math.round(v / mMax * 100)) : 2}%`); mo.append(el("i"), el("b", "", String(i + 1))); box.append(mo); });
+        stagger(box); }
+      chips("g2-chips", [["活跃", num(d.activeDays), "天"], ["最密集的一天", d.peakDay || "—"], d.range ? ["从", md(d.range[0]), `到 ${md(d.range[1])}`] : ["没有可靠的行为时间"]]);
+      /* 03 · three rings + the triple intersection */
+      { const X = d.intersection;
+        drawRings(S("g3-rings"), [["看过", c.watch], ["喜欢", c.liked], ["收藏", c.favorite]]);
+        count($("#w-kept .w-fig"), X.allThree);
+        chips("g3-chips", [["看过 × 喜欢", num(X.watchLiked)], ["看过 × 收藏", num(X.watchFavorite)], ["看完的", pct(d.progress && d.progress.done)]]); }
+      /* 04 · word wall */
+      { const words = atoms.slice(0, 8), top = words[0] ? words[0].count : 1, box = S("g4-cloud"); box.textContent = "";
+        words.forEach((t) => { const wd = el("span", "wd"); wd.style.setProperty("--s", Math.max(.28, t.count / top).toFixed(2)); wd.append(el("b", "", `#${t.name}`), el("small", "", num(t.count))); box.append(wd); });
+        if (!words.length) box.append(el("span", "wd", "记录里还没有明确的话题标签"));
+        stagger(box);
+        chips("g4-chips", [d.topCreator ? [d.topCreator.name, num(d.topCreator.unique), "个作品", d.topCreator.avatarUrl] : null, d.creatorsCount ? ["一共", num(d.creatorsCount), "位创作者"] : null, d.media && d.media[0] ? [d.media[0].label, pct(d.media[0].share)] : null]); }
+      /* 05 · floating faces and the shared cover, the message forms as chips */
+      { const w = $("#w-echo"), faces = $$(".w-float .round", w), sc = $(".w-float .sc", w);
+        if (ch) {
+          faces.forEach((t, i) => { const cv = ch.top[i]; if (cv) cover(t, cv.avatarUrl); else t.style.display = "none"; });
+          if (ch.share && ch.share.coverUrl) cover(sc, ch.share.coverUrl); else sc.style.display = "none";
+          count($(".w-fig", w), ch.friendMessages);
+          $(".w-fig-label", w).textContent = "好友发来的消息 · FRIEND MESSAGES";
+          chips("g5-chips", [...ch.forms.map((f) => [f.label, num(f.count)]), ["会话", num(ch.conversations)]]);
+        } else {
+          [...faces, sc].forEach((t) => { t.style.display = "none"; });
+          count($(".w-fig", w), null);
+          $(".w-fig-label", w).textContent = "好友消息 · 备用文件不含聊天";
+          chips("g5-chips", [["文字"], ["图片"], ["分享"], ["表情"], ["通话 / 语音"]]);
+        } }
+      /* 06 · ledger */
+      fill("g6-year", String(d.year));
+      count($("#w-evidence .w-fig"), Math.round(d.reliableRatio * 100));
+      { const box = S("g6-rows"); box.textContent = "";
+        [["来源", sourceLabel], ["没有行为时间", `${num(d.caveats.noTime)} 条`], ["没有作品 ID", `${num(d.caveats.noVideoId)} 条`], ["有覆盖率的字段", `${num((d.fields || []).length)} 项`], ["采集器警告", `${num(d.caveats.warnings)} 条`]]
+          .forEach(([k, v]) => { const r = el("div", "lr"); r.append(el("span", "", k), el("b", "", v)); box.append(r); });
+        stagger(box); }
+      /* 07 · the seal is only promised here: the year and three empty slots; the words wait for the chapter */
+      fill("g7-year", `${d.year} · SIGNATURE`);
 
       /* 07 signature */
       const sig = S("sig-name");
