@@ -197,7 +197,7 @@ export function ChatWorkspace({
       }
       if (`${row.name} ${row.preview}`.toLocaleLowerCase("zh-CN").includes(normalizedQuery)) return true;
       return row.messages.some((message) => {
-        const searchable = [message.text, message.senderName, message.share?.title, message.share?.author]
+        const searchable = [message.text, message.senderName, message.share?.title, message.share?.author, message.comment?.author, message.comment?.text]
           .filter(Boolean)
           .join(" ")
           .toLocaleLowerCase("zh-CN");
@@ -704,6 +704,30 @@ function ChatMessageBubble({
 }
 
 export function MessageContent({ message, onOpenRecord }: { message: ChatMessage; onOpenRecord: (url: string) => Promise<void> }) {
+  if (message.type === "comment") {
+    const comment = message.comment;
+    const video = message.share;
+    const sourceName = comment?.sourceType === "image" ? "图文" : comment?.sourceType === "video" ? "视频" : "作品";
+    const source = (
+      <View style={styles.commentSource}>
+        {video?.coverUrl ? <View style={styles.commentCoverFrame}><Image accessibilityLabel={`评论来源${sourceName}封面`} resizeMode="cover" source={{ uri: video.coverUrl }} style={styles.commentCover} />{comment?.sourceType === "video" ? <View pointerEvents="none" style={styles.commentPlay}><Play size={17} fill="#ffffff" color="#ffffff" /></View> : null}</View> : null}
+        <View style={styles.commentSourceCopy}>
+          <Text style={styles.commentSourceLabel}>来自{sourceName}</Text>
+          <Text numberOfLines={2} style={styles.commentSourceTitle}>{video?.title ?? (video?.url ? `查看原${sourceName}` : `原${sourceName}信息未提供`)}</Text>
+        </View>
+      </View>
+    );
+    return (
+      <View style={styles.commentCard} testID="chat-comment-card">
+        <Text style={styles.commentAttribution}>{comment?.author ? `分享 @${comment.author} 的评论` : "分享评论"}</Text>
+        {comment?.text || message.text ? <Text numberOfLines={2} style={styles.commentText}>{comment?.text ?? message.text}</Text> : null}
+        {comment?.mediaUrl && comment.mediaType !== "video" ? <Image accessibilityLabel="评论图片" resizeMode="contain" source={{ uri: comment.mediaUrl }} style={styles.commentImage} /> : null}
+        {comment?.mediaType === "video" ? <Text style={styles.commentHint}>视频评论 · 请在原{sourceName}中查看</Text>
+          : !comment?.text && !message.text && !comment?.mediaUrl ? <Text style={styles.commentHint}>评论内容未提供</Text> : null}
+        {video?.url ? <Pressable accessibilityLabel={`打开评论来源${sourceName}`} accessibilityRole="link" onPress={() => void onOpenRecord(video.url!)} style={({ pressed }) => [pressed && styles.pressed, webPointer]}>{source}</Pressable> : source}
+      </View>
+    );
+  }
   if (message.type === "image" && message.mediaUrl) {
     return (
       <Image accessibilityLabel="聊天图片" resizeMode="cover" source={{ uri: message.mediaUrl }} style={styles.messageImage} />
@@ -838,6 +862,7 @@ function isOwnMessage(message: ChatMessage, selfId: string | null): boolean {
 
 function chatPreview(message: ChatMessage): string {
   const text = cleanText(message.text);
+  if (message.type === "comment") return `[分享评论] ${cleanText(message.comment?.text) ?? text ?? (message.comment?.mediaType ? "评论附件" : "评论内容未提供")}`;
   if (text && !/^\[(?:图片|表情包|分享|通话)\]$/u.test(text)) return text;
   switch (message.type) {
     case "image": return "[图片]";
@@ -1028,6 +1053,18 @@ const styles = StyleSheet.create({
   shareTitle: { color: color.text, fontSize: 10, lineHeight: 15, fontWeight: "800" },
   shareAuthor: { color: color.textSecondary, fontSize: 9, marginTop: 3 },
   shareLabel: { color: color.textMuted, fontSize: 8, marginTop: 4 },
+  commentCard: { width: 280, maxWidth: "100%", gap: 10 },
+  commentAttribution: { color: color.textSecondary, fontSize: 12, lineHeight: 19 },
+  commentText: { color: color.text, fontSize: 13, lineHeight: 23 },
+  commentHint: { color: color.textMuted, fontSize: 10, lineHeight: 17 },
+  commentImage: { width: "100%", height: 150 },
+  commentSource: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, borderTopColor: color.border, paddingTop: 10 },
+  commentSourceCopy: { flex: 1, minWidth: 0, gap: 3 },
+  commentSourceLabel: { color: color.textMuted, fontSize: 11, lineHeight: 17 },
+  commentSourceTitle: { color: color.text, fontSize: 12, lineHeight: 20 },
+  commentCoverFrame: { width: 58, height: 58, borderRadius: radius.small, overflow: "hidden", backgroundColor: color.surfaceMuted },
+  commentCover: { width: "100%", height: "100%" },
+  commentPlay: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center" },
   callMessage: { minWidth: 156, flexDirection: "row", alignItems: "center", gap: 9 },
   callIcon: { width: 30, height: 30, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: color.cyanSoft },
   callCopy: { minWidth: 0 },

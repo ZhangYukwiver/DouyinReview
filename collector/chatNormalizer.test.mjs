@@ -96,6 +96,48 @@ describe("matchImapiEndpoint", () => {
 });
 
 describe("normalizeImapiResponse", () => {
+  it.each(["snake", "camel"])("preserves the separate comment and source video fields (%s)", (shape) => {
+    const content = shape === "snake" ? {
+      comment_id: "1234", comment_user_name: "评论作者", comment_content_type: 2,
+      comment_url: { url_list: ["https://p3.douyinpic.com/comment.jpg"] }, aweme_title: "来源视频标题", media_type: 1,
+    } : {
+      commentId: "1234", commentUserName: "评论作者", commentContentType: 2,
+      commentUrl: { url_list: ["https://p3.douyinpic.com/comment.jpg"] }, awemeTitle: "来源视频标题", mediaType: 1,
+    };
+    const result = normalizeImapiResponse(matchImapiEndpoint("https://imapi.douyin.com/v1/message/get_by_conversation"), {
+      msgs: [{ server_id: "shared-comment", type_code: 105, sender_name: "转发好友", content_json: {
+        ...content, comment: "通话这个功能很好", itemId: "7650000000000000000",
+        cover_url: { url_list: ["https://p3.douyinpic.com/video.jpg"] },
+      } }],
+    });
+    expect(result.chatMessages[0]).toMatchObject({
+      type: "comment", text: "通话这个功能很好", senderName: "转发好友",
+      comment: { id: "1234", author: "评论作者", text: "通话这个功能很好", mediaUrl: "https://p3.douyinpic.com/comment.jpg", mediaType: "image", sourceType: "video" },
+      share: { title: "来源视频标题", author: null, coverUrl: "https://p3.douyinpic.com/video.jpg", url: "https://www.douyin.com/video/7650000000000000000" },
+    });
+  });
+
+  it("recognizes comment type 105 in a binary IM response without fabricating missing content", () => {
+    const body = encodeField(1, 2, encodeMessageBodyProto({
+      conv_id: "conv-comment", server_id: 12345, sender_uid: "sender", type_code: 105,
+      content: JSON.stringify({ itemId: "123456", aweme_title: "视频标题不是评论正文", comment_id: "987" }),
+      create_time: 1700000000,
+    }));
+    const result = normalizeImapiResponse(matchImapiEndpoint("https://imapi.douyin.com/v1/message/get_by_conversation"), encodeResponseEnvelope(301, body));
+    expect(result.chatMessages[0]).toMatchObject({ type: "comment", text: null, comment: { id: "987", author: null, text: null }, share: { title: "视频标题不是评论正文" } });
+  });
+
+  it("uses comment identity only for otherwise unclassified messages, never for plain text about comments", () => {
+    const result = normalizeImapiResponse(matchImapiEndpoint("https://imapi.douyin.com/v1/message/get_by_conversation"), { msgs: [
+      { server_id: "comment", type_code: 0, content_json: { comment_id: "987", itemId: "123456", comment: "原评论" } },
+      { server_id: "text", type_code: 7, content_json: { text: "评论区很热闹", comment_id: "987", itemId: "123456" } },
+      { server_id: "share", type_code: "share", content_json: { title: "视频评论区", itemId: "123456" } },
+    ] });
+    expect(result.chatMessages.find(message => message.id === "comment")).toMatchObject({ type: "comment", text: "原评论" });
+    expect(result.chatMessages.find(message => message.id === "text")).toMatchObject({ type: "text", text: "评论区很热闹", share: null });
+    expect(result.chatMessages.find(message => message.id === "share")).toMatchObject({ type: "share" });
+  });
+
   it("normalizes JSON chat responses for text, image, sticker, share, and call messages", () => {
     const endpoint = matchImapiEndpoint("https://imapi.douyin.com/v1/message/get_by_conversation/");
     const result = normalizeImapiResponse(endpoint, {

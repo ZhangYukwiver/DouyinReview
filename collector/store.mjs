@@ -11,7 +11,7 @@ const LEGACY_DIRECT_COMPLETE_WARNING_PREFIX = "无界面读取完成：";
 const MAX_CHAT_MESSAGES = 100_000;
 const MAX_CHAT_CONVERSATIONS = 10_000;
 const MAX_CHAT_STRING = 500;
-const CHAT_TYPES = new Set(["text", "image", "sticker", "share", "call", "system", "voice", "video", "unknown"]);
+const CHAT_TYPES = new Set(["text", "image", "sticker", "share", "comment", "call", "system", "voice", "video", "unknown"]);
 const IMAGE_HOST_SUFFIXES = ["douyin.com", "douyinpic.com", "douyinvod.com", "byteimg.com", "ibytedtos.com", "snssdk.com"];
 
 function validRecordCollection(value) {
@@ -186,6 +186,18 @@ function normalizeChatMessage(value) {
     callDurationSeconds: rawDuration,
   };
   if (senderAvatarUrl) result.senderAvatarUrl = senderAvatarUrl;
+  if (type === "comment") {
+    const comment = value.comment && typeof value.comment === "object" ? value.comment : {};
+    result.comment = {
+      id: chatString(comment.id, 300),
+      author: chatString(comment.author),
+      text: value.comment ? chatString(comment.text) : rawText,
+      mediaUrl: chatImageUrl(comment.mediaUrl),
+      mediaType: ["image", "sticker", "video"].includes(comment.mediaType) ? comment.mediaType : null,
+      sourceType: ["image", "video"].includes(comment.sourceType) ? comment.sourceType : null,
+    };
+    result.text = result.comment.text;
+  }
   return result;
 }
 

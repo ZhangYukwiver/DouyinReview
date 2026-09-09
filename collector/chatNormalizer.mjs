@@ -14,7 +14,7 @@ const IMAGE_HOST_SUFFIXES = [
   "ibytedtos.com",
   "snssdk.com",
 ];
-const CHAT_TYPES = new Set(["text", "image", "sticker", "share", "call", "system", "voice", "video", "unknown"]);
+const CHAT_TYPES = new Set(["text", "image", "sticker", "share", "comment", "call", "system", "voice", "video", "unknown"]);
 const CONVERSATION_KINDS = new Set(["friend", "group", "unknown"]);
 const STICKER_TYPES = new Set([500, 501, 507, 508, 510, 514, 516]);
 const IMAGE_TYPES = new Set([2702, 2703, 2704]);
@@ -633,8 +633,41 @@ function parseMediaUrlFromContent(content) {
     ?? (isObject(candidate) ? normalizeImageUrl(candidate.url_list?.[0] ?? candidate.origin_url_list?.[0]) : null);
 }
 
+// Douyin PC IM identifies SHARE_COMMENT by message type 105. Its payload
+// carries comment/comment_id/comment_user_name separately from aweme_title.
+// A comment body must never be used as the title of the source video.
+function isCommentContent(typeCode, content) {
+  const explicit = cleanString(typeCode, 50)?.toLowerCase();
+  if (explicit === "105" || explicit === "comment" || explicit === "share_comment") return true;
+  if (explicit && explicit !== "0" && explicit !== "unknown") return false;
+  return Boolean(firstString(content?.comment_id, content?.commentId)
+    && firstString(content?.itemId, content?.item_id, content?.aweme_id));
+}
+
+function parseComment(content) {
+  const mediaCode = Number(content.comment_content_type ?? content.commentContentType);
+  return {
+    id: firstString(content.comment_id, content.commentId),
+    author: firstString(content.comment_user_name, content.commentUserName),
+    text: firstString(content.comment),
+    mediaUrl: imageUrlFromValue(content.comment_url ?? content.commentUrl),
+    mediaType: ({ 2: "image", 3: "sticker", 4: "video" })[mediaCode] ?? null,
+    sourceType: ({ 1: "video", 2: "image" })[Number(content.media_type ?? content.mediaType)] ?? null,
+  };
+}
+
+function parseCommentVideo(content) {
+  return parseShare({
+    itemId: firstString(content.itemId, content.item_id, content.aweme_id),
+    aweme_title: firstString(content.aweme_title, content.awemeTitle),
+    coverUrl: content.cover_url ?? content.coverUrl,
+    share_url: content.share_url ?? content.shareUrl,
+  });
+}
+
 function parseMessageType(typeCode, content) {
   const explicit = cleanString(typeCode, 50)?.toLowerCase();
+  if (isCommentContent(typeCode, content)) return "comment";
   if (explicit === "call" || explicit === "193") return "call";
   if (!isObject(content)) return "unknown";
   if (isCallContent(typeCode, content)) return "call";
@@ -776,13 +809,16 @@ function parseMessageObject(value, fallbackConversationId = null, fallbackConver
     callDurationSeconds: null,
   };
   if (senderAvatarUrl) message.senderAvatarUrl = senderAvatarUrl;
-  const share = type === "share" ? parseShare(contentForClassification) : null;
+  const comment = type === "comment" ? parseComment(contentForClassification) : null;
+  const share = type === "comment" ? parseCommentVideo(contentForClassification)
+    : type === "share" ? parseShare(contentForClassification) : null;
   const mediaUrl = parseMediaUrlFromContent(contentForClassification);
-  const messageText = parseText(contentObject) ?? parseText(value);
+  const messageText = comment ? comment.text : parseText(contentObject) ?? parseText(value);
   const duration = type === "call"
     ? parseCallDuration(contentForClassification) ?? parseCallDuration(value)
     : null;
-  const text = messageText ?? share?.title ?? null;
+  const text = comment ? messageText : messageText ?? share?.title ?? null;
+  if (comment) message.comment = comment;
   if (text) message.text = text;
   if (mediaUrl) message.mediaUrl = mediaUrl;
   if (share) message.share = share;
@@ -1210,9 +1246,10 @@ export class ChatMessageAccumulator {
         senderName: normalized.senderName ?? previous?.senderName ?? null,
         senderAvatarUrl: normalized.senderAvatarUrl ?? previous?.senderAvatarUrl ?? null,
         sentAt: normalized.sentAt ?? previous?.sentAt ?? null,
-        text: normalized.text ?? previous?.text ?? null,
+        text: normalized.type === "comment" ? normalized.comment?.text ?? null : normalized.text ?? previous?.text ?? null,
         mediaUrl: normalized.mediaUrl ?? previous?.mediaUrl ?? null,
         share: normalized.share ?? previous?.share ?? null,
+        ...(normalized.comment || previous?.comment ? { comment: normalized.comment ?? previous.comment } : {}),
         callDurationSeconds: normalized.callDurationSeconds ?? previous?.callDurationSeconds ?? null,
       });
     }

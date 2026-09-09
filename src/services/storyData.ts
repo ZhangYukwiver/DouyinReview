@@ -423,7 +423,7 @@ function chatSummary(messages: ChatMessage[], conversations: ChatConversationSum
   const forms: Array<[string, string, (message: ChatMessage) => boolean]> = [
     ["text", "文字", (message) => message.type === "text"],
     ["image", "图片", (message) => message.type === "image"],
-    ["share", "分享", (message) => message.type === "share"],
+    ["share", "分享", (message) => message.type === "share" || message.type === "comment"],
     ["sticker", "表情", (message) => message.type === "sticker"],
     ["call · voice", "通话 / 语音", (message) => message.type === "call" || message.type === "voice"],
   ];

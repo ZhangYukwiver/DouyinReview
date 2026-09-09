@@ -132,7 +132,7 @@ const IMAGE_HOST_SUFFIXES = [
   "ibytedtos.com",
   "snssdk.com",
 ] as const;
-const CHAT_TYPES: ChatMessageType[] = ["text", "image", "sticker", "share", "call", "system", "voice", "video", "unknown"];
+const CHAT_TYPES: ChatMessageType[] = ["text", "image", "sticker", "share", "comment", "call", "system", "voice", "video", "unknown"];
 const NUMERIC_CHAT_ID = /^(?:0|\d{15,})$/u;
 
 function cleanRecordString(value: unknown, limit = MAX_RECORD_STRING): string | null {
@@ -428,6 +428,18 @@ function parseChatMessage(value: unknown): ChatMessage | null {
     callDurationSeconds: duration,
   };
   if (senderAvatarUrl) message.senderAvatarUrl = senderAvatarUrl;
+  if (type === "comment") {
+    const comment = isObject(value.comment) ? value.comment : {};
+    message.comment = {
+      id: cleanRecordString(comment.id, 300),
+      author: cleanRecordString(comment.author),
+      text: isObject(value.comment) ? cleanRecordString(comment.text) : rawText,
+      mediaUrl: parseImageUrl(comment.mediaUrl),
+      mediaType: comment.mediaType === "image" || comment.mediaType === "sticker" || comment.mediaType === "video" ? comment.mediaType : null,
+      sourceType: comment.sourceType === "image" || comment.sourceType === "video" ? comment.sourceType : null,
+    };
+    message.text = message.comment.text;
+  }
   return message;
 }
 
