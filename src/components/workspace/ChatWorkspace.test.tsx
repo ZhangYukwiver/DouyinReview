@@ -137,4 +137,15 @@ describe("MessageContent", () => {
 
     expect(element).toMatchObject({ props: { children: "比心" } });
   });
+
+  it("renders Douyin emoji codes as inline images and keeps unknown codes as text", () => {
+    const element = MessageContent({
+      message: message("text-emoji", "conversation-1", "2026-08-03T10:00:00Z", "[宕机]哈哈[自创代码]"),
+      onOpenRecord: vi.fn(),
+    }) as { props: { children: Array<string | { props: { accessibilityLabel: string; source: { uri: string } } }> } };
+
+    const [emoji, ...rest] = element.props.children;
+    expect(emoji).toMatchObject({ props: { accessibilityLabel: "[宕机]", source: { uri: expect.stringMatching(/^https:\/\//u) } } });
+    expect(rest).toEqual(["哈哈", "[自创代码]"]);
+  });
 });

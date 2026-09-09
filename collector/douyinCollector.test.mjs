@@ -1,4 +1,5 @@
 import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { EventEmitter } from "node:events";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -302,7 +303,8 @@ describe("video download jobs", () => {
     await collector.runVideoDownloadJob(collector.videoDownloadJobs.get("download-status-reset"));
 
     expect(context.close).toHaveBeenCalledTimes(1);
-    expect(collector.getStatus()).toEqual(previousStatus);
+    expect(collector.getStatus()).toEqual({ ...previousStatus, revision: expect.any(Number) });
+    expect(collector.getStatus().revision).toBeGreaterThan(previousStatus.revision);
   });
 
   it("restores the terminal collector status when headless launch fails", async () => {
@@ -341,7 +343,8 @@ describe("video download jobs", () => {
     await collector.runVideoDownloadJob(job);
 
     expect(collector.getVideoDownloadJob(job.id)).toMatchObject({ status: "failed" });
-    expect(collector.getStatus()).toEqual(previousStatus);
+    expect(collector.getStatus()).toEqual({ ...previousStatus, revision: expect.any(Number) });
+    expect(collector.getStatus().revision).toBeGreaterThan(previousStatus.revision);
   });
 
   it("blocks sync and observation while a download is running", async () => {
@@ -743,8 +746,8 @@ describe("DouyinCollector manual observation", () => {
     await expect(collector.stopObservation()).resolves.toBe(true);
   });
 
-  it("finishes one chat snapshot and removes its response listener automatically", async () => {
-    const page = {
+  it("continues receiving after history finishes, reconnects without duplicates, and stops explicitly", async () => {
+    const page = Object.assign(new EventEmitter(), {
       url: () => "https://www.douyin.com/",
       evaluate: vi.fn(async (fn) => {
         const source = String(fn);
@@ -753,13 +756,15 @@ describe("DouyinCollector manual observation", () => {
         if (source.includes("setCurConversation")) return true;
         return null;
       }),
-    };
+    });
     const context = fakeContext(page);
     const removeListener = vi.spyOn(context, "off");
     context.close = vi.fn(async () => undefined);
     const store = mockStore("2026-08-09T00:27:00.000Z");
     const collector = new DouyinCollector({ executablePath: "chrome", dataDirectory: ".test", store });
     collector.snapshot = emptySnapshot();
+    collector.context = context;
+    collector.contextHeadless = true;
     collector.ensureBrowser = vi.fn().mockResolvedValue(context);
     collector.currentPage = vi.fn().mockResolvedValue(page);
     collector.visit = vi.fn().mockResolvedValue(undefined);
@@ -781,37 +786,108 @@ describe("DouyinCollector manual observation", () => {
           server_id: "chat-once-1",
           sender_uid: "me",
           type_code: 7,
-          content_json: { text: "只读取这一轮" },
+          content_json: { text: "历史消息" },
         }],
       }),
     });
 
-    await vi.waitFor(() => expect(collector.getStatus().state).toBe("complete"), { timeout: 5_000 });
-    await vi.waitFor(() => expect(collector.observationPromise).toBeNull());
-    expect(collector.getStatus()).toMatchObject({ state: "complete", phase: null, browserOpen: false });
+    await vi.waitFor(() => expect(collector.getStatus().progress).toBeNull(), { timeout: 5_000 });
+    expect(collector.observationPromise).not.toBeNull();
+    expect(collector.getStatus()).toMatchObject({ state: "observing", phase: "chat_messages", browserOpen: true });
     expect(statusUpdates.mock.calls.some(([patch]) => patch.progress?.current === 1 && patch.progress?.total === 1)).toBe(true);
     expect(statusUpdates.mock.calls.some(([patch]) => /聊天全量读取.*1\/1/u.test(patch.message ?? ""))).toBe(true);
     expect(collector.getStatus().progress).toBeNull();
-    expect(removeListener).toHaveBeenCalledWith("response", expect.any(Function));
-    expect(context.close).toHaveBeenCalledTimes(1);
+    expect(removeListener).not.toHaveBeenCalledWith("response", expect.any(Function));
+    expect(context.close).not.toHaveBeenCalled();
     expect(collector.getSnapshot().chatMessages).toEqual([expect.objectContaining({ id: "chat-once-1" })]);
 
-    const saveCount = store.save.mock.calls.length;
-    context.emit("response", {
+    const lateResponse = {
       url: () => "https://imapi.douyin.com/v1/message/get_by_conversation",
       ok: () => true,
       status: () => 200,
       headers: () => ({}),
       json: () => Promise.resolve({ msgs: [{
         conv_id: "friend-once",
-        server_id: "chat-after-close",
+        server_id: "chat-live",
         type_code: 7,
-        content_json: { text: "不应持续读取" },
+        content_json: { text: "历史整理后收到的新消息" },
       }] }),
-    });
+    };
+    context.emit("response", lateResponse);
+    await vi.waitFor(() => expect(collector.getSnapshot().chatMessages).toHaveLength(2));
+    const socket = Object.assign(new EventEmitter(), { url: () => "wss://frontier-im.douyin.com/ws/v2" });
+    page.emit("websocket", socket);
+    const push = JSON.stringify({ body: { has_new_message_notify: {
+      conversation_id: "friend-once", conversation_type: 1,
+      message: { server_message_id: "chat-live", message_type: 7, content: JSON.stringify({ text: "历史整理后收到的新消息" }) },
+    } } });
+    socket.emit("framereceived", { payload: push });
+    expect(collector.getStatus().chatConnection).toBe("connected");
+    socket.emit("close");
+    expect(collector.getStatus().chatConnection).toBe("reconnecting");
+    const reconnected = Object.assign(new EventEmitter(), { url: socket.url });
+    page.emit("websocket", reconnected);
+    reconnected.emit("framereceived", { payload: push });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(collector.getStatus().chatConnection).toBe("connected");
+    expect(collector.getSnapshot().chatMessages).toHaveLength(2);
+
+    await expect(collector.stopObservation()).resolves.toBe(true);
+    expect(collector.getStatus()).toMatchObject({ state: "idle", chatConnection: null });
+    expect(collector.observationPromise).toBeNull();
+    expect(context.close).toHaveBeenCalledTimes(1);
+    expect(removeListener).toHaveBeenCalledWith("response", expect.any(Function));
+    const saveCount = store.save.mock.calls.length;
+    context.emit("response", lateResponse);
+    reconnected.emit("framereceived", { payload: push });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(store.save).toHaveBeenCalledTimes(saveCount);
-    expect(collector.getSnapshot().chatMessages).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: "chat-after-close" })]));
+    expect(reconnected.eventNames()).toEqual([]);
+  });
+
+  it("increments a stored group summary for new messages without persisting group bodies or counting replays", async () => {
+    const page = { url: () => "https://www.douyin.com/", evaluate: vi.fn(async (fn) => String(fn).includes("sortedConversationIdList") ? [] : "me") };
+    const context = fakeContext(page), store = mockStore();
+    const collector = new DouyinCollector({ executablePath: "chrome", dataDirectory: ".test", store });
+    collector.snapshot = { ...emptySnapshot(), chatConversations: [{ id: "group-live", kind: "group", name: "测试群", messageCount: 100, ownMessageCount: 20 }] };
+    collector.ensureBrowser = vi.fn().mockResolvedValue(context);
+    collector.currentPage = vi.fn().mockResolvedValue(page);
+    collector.visit = vi.fn().mockResolvedValue(undefined);
+    collector.waitForLogin = vi.fn().mockResolvedValue(undefined);
+    expect(collector.startChatObservation()).toBe(true);
+    await vi.waitFor(() => expect(collector.getStatus().state).toBe("observing"));
+    const response = fakeResponse("/v1/message/get_by_conversation", { msgs: [
+      { conv_id: "group-live", conversation_type: 2, server_id: "group-old", sender_uid: "other", type_code: 7, created_at_us: Date.parse("2026-08-08T23:59:00Z") * 1000, content_json: { text: "历史群正文" } },
+      { conv_id: "group-live", conversation_type: 2, server_id: "group-new", sender_uid: "me", type_code: 7, created_at_us: Date.parse("2026-08-09T00:01:00Z") * 1000, content_json: { text: "新群正文" } },
+    ] });
+    response.url = () => "https://imapi.douyin.com/v1/message/get_by_conversation";
+    context.emit("response", response);
+    await vi.waitFor(() => expect(collector.getSnapshot().chatConversations[0]).toMatchObject({ messageCount: 101, ownMessageCount: 21 }));
+    context.emit("response", response);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(collector.getSnapshot().chatConversations[0]).toMatchObject({ messageCount: 101, ownMessageCount: 21 });
+    expect(collector.getSnapshot().chatMessages).toEqual([]);
+    await collector.stopObservation();
+  });
+
+  it("allows downloads during reception and pauses only the chat tab when another feature shares the browser", async () => {
+    const page = { close: vi.fn(async () => {}) }, otherPage = { close: vi.fn(async () => {}) };
+    const context = { pages: () => [page, otherPage], close: vi.fn(async () => {}) };
+    const collector = new DouyinCollector({ executablePath: "chrome", dataDirectory: ".test", store: {} });
+    collector.snapshot = emptySnapshot();
+    collector.context = context;
+    collector.contextHeadless = true;
+    collector.observation = { active: true, mode: "chat", page, stop: vi.fn() };
+    collector.observationPromise = Promise.resolve();
+    collector.updateStatus({ state: "observing", phase: "chat_messages", chatConnection: "connected" });
+    collector.runVideoDownloadJob = vi.fn(async () => {});
+    expect(collector.startVideoDownload("https://www.douyin.com/video/1234567890").status).toBe("queued");
+    await collector.videoDownloadQueue;
+    expect(collector.runVideoDownloadJob).toHaveBeenCalledTimes(1);
+    await collector.stopObservation();
+    expect(page.close).toHaveBeenCalledTimes(1);
+    expect(context.close).not.toHaveBeenCalled();
+    expect(otherPage.close).not.toHaveBeenCalled();
   });
 
   it("closes a chat context before waiting for a pending navigation to cancel", async () => {

@@ -19,8 +19,8 @@ const BLOCKED_STATES = new Set<CollectorState>([
 ]);
 
 export function shouldAutoSync(guard: AutoSyncGuard): boolean {
-  // Foreground refreshes are intentionally limited to video records; chat is
-  // collected only by the explicit one-shot flow in App.
+  // Foreground refreshes update video records. App pauses and resumes live
+  // chat reception when the refresh needs the same browser.
   return guard.enabled
     && guard.connected
     && guard.source === "collector"

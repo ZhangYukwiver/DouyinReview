@@ -36,6 +36,8 @@ export interface CollectorStatus {
   browserOpen: boolean;
   /** state 为 error 时的错误码，如 login_required */
   code?: string | null;
+  revision?: number;
+  chatConnection?: "connecting" | "connected" | "reconnecting" | null;
 }
 
 export interface CollectorSnapshot {
@@ -132,7 +134,7 @@ const IMAGE_HOST_SUFFIXES = [
   "ibytedtos.com",
   "snssdk.com",
 ] as const;
-const CHAT_TYPES: ChatMessageType[] = ["text", "image", "sticker", "share", "call", "system", "voice", "video", "unknown"];
+const CHAT_TYPES: ChatMessageType[] = ["text", "image", "sticker", "share", "comment", "call", "system", "voice", "video", "unknown"];
 const NUMERIC_CHAT_ID = /^(?:0|\d{15,})$/u;
 
 function cleanRecordString(value: unknown, limit = MAX_RECORD_STRING): string | null {
@@ -428,6 +430,18 @@ function parseChatMessage(value: unknown): ChatMessage | null {
     callDurationSeconds: duration,
   };
   if (senderAvatarUrl) message.senderAvatarUrl = senderAvatarUrl;
+  if (type === "comment") {
+    const comment = isObject(value.comment) ? value.comment : {};
+    message.comment = {
+      id: cleanRecordString(comment.id, 300),
+      author: cleanRecordString(comment.author),
+      text: isObject(value.comment) ? cleanRecordString(comment.text) : rawText,
+      mediaUrl: parseImageUrl(comment.mediaUrl),
+      mediaType: comment.mediaType === "image" || comment.mediaType === "sticker" || comment.mediaType === "video" ? comment.mediaType : null,
+      sourceType: comment.sourceType === "image" || comment.sourceType === "video" ? comment.sourceType : null,
+    };
+    message.text = message.comment.text;
+  }
   return message;
 }
 
@@ -560,6 +574,9 @@ function parseStatus(value: unknown): CollectorStatus {
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : null,
     browserOpen: value.browserOpen === true,
     code: typeof value.code === "string" ? value.code : null,
+    ...(typeof value.revision === "number" && Number.isSafeInteger(value.revision) && value.revision >= 0 ? { revision: value.revision } : {}),
+    chatConnection: value.chatConnection === "connecting" || value.chatConnection === "connected" || value.chatConnection === "reconnecting"
+      ? value.chatConnection : null,
   };
 }
 
@@ -693,8 +710,9 @@ export async function pairCollector(baseUrl: string, code: string): Promise<stri
   return value.token;
 }
 
-export async function getCollectorStatus(baseUrl: string, token: string): Promise<CollectorStatus> {
-  return parseStatus(await requestJson(baseUrl, "/v1/status", {}, token));
+export async function getCollectorStatus(baseUrl: string, token: string, afterRevision?: number, signal?: AbortSignal): Promise<CollectorStatus> {
+  const query = afterRevision === undefined ? "" : `?afterRevision=${afterRevision}`;
+  return parseStatus(await requestJson(baseUrl, `/v1/status${query}`, { signal }, token));
 }
 
 export async function getCollectorRecords(baseUrl: string, token: string): Promise<CollectorSnapshot> {

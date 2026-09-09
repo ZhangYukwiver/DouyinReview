@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Image,
@@ -22,6 +22,7 @@ import {
   Mic,
   MoreHorizontal,
   Phone,
+  Pause,
   Play,
   Search,
   Send,
@@ -39,10 +40,13 @@ import {
   type ChatMessage,
   hasChatShareEvidence,
 } from "../../domain/chatRecords";
+import type { CollectorStatus } from "../../services/localCollector";
 import { alpha, workspaceColors as color, workspaceFonts as font, workspaceRadii as radius } from "./workspaceTheme";
 import { fx } from "./motion";
+import { splitChatEmoji } from "../../domain/chatEmoji";
 
 const webPointer = Platform.OS === "web" ? ({ cursor: "pointer" } as object) : null;
+const webInlineEmoji = Platform.OS === "web" ? ({ verticalAlign: "text-bottom" } as object) : null;
 const CHAT_MESSAGE_RENDER_LIMIT = 320;
 
 type ChatFilter = "all" | "friend" | "group";
@@ -53,6 +57,9 @@ export interface ChatWorkspaceProps {
   conversations: ChatConversationSummary[];
   privacy: boolean;
   busy: boolean;
+  connected?: boolean;
+  status?: CollectorStatus | null;
+  onToggleReception?: () => void;
   onOpenRecord: (url: string) => Promise<void>;
   onOpenSettings: () => void;
 }
@@ -174,6 +181,9 @@ export function ChatWorkspace({
   conversations,
   privacy,
   busy,
+  connected = false,
+  status = null,
+  onToggleReception,
   onOpenRecord,
   onOpenSettings,
 }: ChatWorkspaceProps) {
@@ -197,7 +207,7 @@ export function ChatWorkspace({
       }
       if (`${row.name} ${row.preview}`.toLocaleLowerCase("zh-CN").includes(normalizedQuery)) return true;
       return row.messages.some((message) => {
-        const searchable = [message.text, message.senderName, message.share?.title, message.share?.author]
+        const searchable = [message.text, message.senderName, message.share?.title, message.share?.author, message.comment?.author, message.comment?.text]
           .filter(Boolean)
           .join(" ")
           .toLocaleLowerCase("zh-CN");
@@ -230,8 +240,34 @@ export function ChatWorkspace({
     if (mobile) setMobileDetail(true);
   };
 
+  const receiving = status?.phase === "chat_messages" && ["launching_browser", "observing"].includes(status.state);
+  const receptionLabel = !connected ? "未连接采集器"
+    : !receiving ? "已暂停接收"
+      : status?.chatConnection === "connected" ? "实时接收中"
+        : status?.chatConnection === "reconnecting" ? "连接中断，正在重连" : "正在连接消息";
+  const controlDisabled = connected && busy && !receiving;
+
   return (
-    <View style={[styles.root, mobile && styles.rootMobile]} testID="chat-workspace">
+    <View style={styles.workspace} testID="chat-workspace">
+      <View style={styles.receptionBar}>
+        <View style={styles.receptionCopy}>
+          <View style={[styles.receptionDot, { backgroundColor: receiving && status?.chatConnection === "connected" ? color.green : color.textMuted }]} />
+          <Text accessibilityLiveRegion="polite" style={styles.receptionLabel}>{receptionLabel}</Text>
+          {receiving && status?.progress ? <Text style={styles.receptionProgress}>整理历史 {status.progress.current}/{status.progress.total || "…"}</Text> : null}
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={!connected ? "连接采集器" : receiving ? "暂停接收" : "开始接收"}
+          accessibilityState={{ disabled: controlDisabled }}
+          disabled={controlDisabled}
+          onPress={!connected ? onOpenSettings : onToggleReception}
+          style={({ pressed }) => [styles.receptionButton, pressed && styles.pressed, controlDisabled && { opacity: 0.45 }, webPointer]}
+        >
+          {receiving ? <Pause color={color.textSecondary} size={13} /> : <Play color={color.textSecondary} size={13} />}
+          <Text style={styles.receptionButtonText}>{!connected ? "连接采集器" : receiving ? "暂停接收" : "开始接收"}</Text>
+        </Pressable>
+      </View>
+      <View style={[styles.root, mobile && styles.rootMobile]}>
       {!showDetail ? (
         <ChatListPane
           busy={busy}
@@ -281,6 +317,7 @@ export function ChatWorkspace({
           />
         </>
       )}
+      </View>
     </View>
   );
 }
@@ -329,7 +366,7 @@ function ChatListPane({
       <View style={styles.listHeader}>
         <View style={styles.listHeaderCopy}>
           <Text style={styles.chatTitle}>消息</Text>
-          <Text style={styles.chatSubtitle}>{allRows.length ? `${formatCount(allRows.length)} 个会话 · ${formatCount(totalMessages)} 条快照` : "本地聊天快照"}</Text>
+          <Text style={styles.chatSubtitle}>{allRows.length ? `${formatCount(allRows.length)} 个会话 · ${formatCount(totalMessages)} 条消息` : "消息会保存在本机"}</Text>
         </View>
         <Pressable
           accessibilityLabel="聚焦搜索聊天"
@@ -486,45 +523,21 @@ function ChatDetailPane({
 }) {
   const messageListRef = useRef<FlatList<ChatMessage>>(null);
   const stickToBottomRef = useRef(true);
-  const hasMeasuredContentRef = useRef(false);
-  const initialLayoutRef = useRef(true);
-  const initialLayoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const previousRowIdRef = useRef<string | null>(null);
 
-  // Reset the follow-latest behavior when switching conversations. This is a
-  // ref-only update so it happens before the new list can report its content
-  // size, while keeping hook order stable when the mobile empty state toggles.
-  const rowId = row?.id ?? null;
-  if (previousRowIdRef.current !== rowId) {
-    previousRowIdRef.current = rowId;
-    stickToBottomRef.current = true;
-    hasMeasuredContentRef.current = false;
-    initialLayoutRef.current = true;
-    if (initialLayoutTimerRef.current !== null) {
-      clearTimeout(initialLayoutTimerRef.current);
-      initialLayoutTimerRef.current = null;
+  // 网页端直接按 DOM 尺寸定位：FlatList 自带的 scrollToEnd 靠尚未量到的行高估算，
+  // 会先落在顶部再逐批往下跳。用内容容器的高度而不是 scrollHeight，入场动画的位移不会把它撑高。
+  const scrollToBottom = () => {
+    const node = messageListRef.current?.getScrollableNode?.();
+    if (typeof node?.scrollHeight !== "number") {
+      messageListRef.current?.scrollToEnd({ animated: false });
+      return;
     }
-  }
+    node.scrollTop = (node.firstElementChild?.offsetHeight ?? node.scrollHeight) - node.clientHeight;
+  };
 
-  const visibleMessageCount = row && row.kind !== "group"
-    ? Math.min(row.messages.length, CHAT_MESSAGE_RENDER_LIMIT)
-    : 0;
-  const latestMessageId = row?.messages[row.messages.length - 1]?.id ?? null;
-
-  // FlatList can finish measuring rows one frame after its first content-size
-  // notification. A short, cancellable follow-up makes the initial view land
-  // on the latest message without taking control back after the user scrolls.
-  useEffect(() => {
-    if (!row || row.kind === "group") return undefined;
-    const timers = [0, 80, 240, 480, 800].map((delay) => setTimeout(() => {
-      if (stickToBottomRef.current) messageListRef.current?.scrollToEnd({ animated: false });
-    }, delay));
-    return () => timers.forEach((timer) => clearTimeout(timer));
-  }, [latestMessageId, row?.kind, rowId, visibleMessageCount]);
-
-  useEffect(() => () => {
-    if (initialLayoutTimerRef.current !== null) clearTimeout(initialLayoutTimerRef.current);
-  }, []);
+  // 切换会话时本组件按会话 id 重新挂载：气泡在首次提交里一次渲染完（initialNumToRender），
+  // 绘制前就把列表拉到最新一条，不会先看到最早的消息再往下跳。
+  useLayoutEffect(scrollToBottom, []);
 
   if (!row) {
     return (
@@ -544,7 +557,6 @@ function ChatDetailPane({
     : row.messages;
   const omitted = row.messages.length - visibleMessages.length;
   const handleMessageScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (!hasMeasuredContentRef.current || initialLayoutRef.current) return;
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
     if (Number.isFinite(distanceFromBottom)) {
@@ -568,7 +580,7 @@ function ChatDetailPane({
         <View style={styles.detailHeaderActions}>
           <View style={styles.readonlyBadge}>
             <ShieldCheck color={color.green} size={13} strokeWidth={2} />
-            <Text style={styles.readonlyBadgeText}>本地快照</Text>
+            <Text style={styles.readonlyBadgeText}>本地保存</Text>
           </View>
           <Pressable accessibilityLabel="聊天详情" accessibilityRole="button" style={[styles.iconButton, webPointer]}>
             <MoreHorizontal color={color.textMuted} size={19} />
@@ -592,19 +604,9 @@ function ChatDetailPane({
           keyExtractor={(item) => item.id}
           ListEmptyComponent={<MessageListEmpty privacy={privacy} />}
           ListHeaderComponent={omitted > 0 ? <Text style={styles.messageLimitNotice}>仅显示最近 {CHAT_MESSAGE_RENDER_LIMIT} 条，另有 {omitted} 条更早消息保留在本地快照中。</Text> : <ConversationDateDivider />}
+          initialNumToRender={CHAT_MESSAGE_RENDER_LIMIT}
           onContentSizeChange={() => {
-            hasMeasuredContentRef.current = true;
-            if (initialLayoutRef.current) {
-              stickToBottomRef.current = true;
-              messageListRef.current?.scrollToEnd({ animated: false });
-              if (initialLayoutTimerRef.current !== null) clearTimeout(initialLayoutTimerRef.current);
-              initialLayoutTimerRef.current = setTimeout(() => {
-                initialLayoutRef.current = false;
-                initialLayoutTimerRef.current = null;
-              }, 350);
-            } else if (stickToBottomRef.current) {
-              messageListRef.current?.scrollToEnd({ animated: false });
-            }
+            if (stickToBottomRef.current) scrollToBottom();
           }}
           onScroll={handleMessageScroll}
           ref={messageListRef}
@@ -704,6 +706,30 @@ function ChatMessageBubble({
 }
 
 export function MessageContent({ message, onOpenRecord }: { message: ChatMessage; onOpenRecord: (url: string) => Promise<void> }) {
+  if (message.type === "comment") {
+    const comment = message.comment;
+    const video = message.share;
+    const sourceName = comment?.sourceType === "image" ? "图文" : comment?.sourceType === "video" ? "视频" : "作品";
+    const source = (
+      <View style={styles.commentSource}>
+        {video?.coverUrl ? <View style={styles.commentCoverFrame}><Image accessibilityLabel={`评论来源${sourceName}封面`} resizeMode="cover" source={{ uri: video.coverUrl }} style={styles.commentCover} />{comment?.sourceType === "video" ? <View pointerEvents="none" style={styles.commentPlay}><Play size={17} fill="#ffffff" color="#ffffff" /></View> : null}</View> : null}
+        <View style={styles.commentSourceCopy}>
+          <Text style={styles.commentSourceLabel}>来自{sourceName}</Text>
+          <Text numberOfLines={2} style={styles.commentSourceTitle}>{video?.title ?? (video?.url ? `查看原${sourceName}` : `原${sourceName}信息未提供`)}</Text>
+        </View>
+      </View>
+    );
+    return (
+      <View style={styles.commentCard} testID="chat-comment-card">
+        <Text style={styles.commentAttribution}>{comment?.author ? `分享 @${comment.author} 的评论` : "分享评论"}</Text>
+        {comment?.text || message.text ? <Text numberOfLines={2} style={styles.commentText}>{comment?.text ?? message.text}</Text> : null}
+        {comment?.mediaUrl && comment.mediaType !== "video" ? <Image accessibilityLabel="评论图片" resizeMode="contain" source={{ uri: comment.mediaUrl }} style={styles.commentImage} /> : null}
+        {comment?.mediaType === "video" ? <Text style={styles.commentHint}>视频评论 · 请在原{sourceName}中查看</Text>
+          : !comment?.text && !message.text && !comment?.mediaUrl ? <Text style={styles.commentHint}>评论内容未提供</Text> : null}
+        {video?.url ? <Pressable accessibilityLabel={`打开评论来源${sourceName}`} accessibilityRole="link" onPress={() => void onOpenRecord(video.url!)} style={({ pressed }) => [pressed && styles.pressed, webPointer]}>{source}</Pressable> : source}
+      </View>
+    );
+  }
   if (message.type === "image" && message.mediaUrl) {
     return (
       <Image accessibilityLabel="聊天图片" resizeMode="cover" source={{ uri: message.mediaUrl }} style={styles.messageImage} />
@@ -716,7 +742,7 @@ export function MessageContent({ message, onOpenRecord }: { message: ChatMessage
     // ordinary text-bubble path instead of showing a misleading play button.
     if (!hasChatShareEvidence(share)) {
       const text = message.text && !/^\[分享\]$/u.test(message.text) ? message.text : share.title;
-      return <Text style={styles.bubbleText}>{text ?? "文字消息"}</Text>;
+      return <Text style={styles.bubbleText}>{renderChatText(text ?? "文字消息")}</Text>;
     }
     const card = (
       <View style={styles.shareCard}>
@@ -757,7 +783,7 @@ export function MessageContent({ message, onOpenRecord }: { message: ChatMessage
         />
       );
     }
-    return <Text style={styles.stickerText}>{message.text && !/^\[表情包\]$/u.test(message.text) ? message.text : "表情包"}</Text>;
+    return <Text style={styles.stickerText}>{renderChatText(message.text && !/^\[表情包\]$/u.test(message.text) ? message.text : "表情包")}</Text>;
   }
   if (message.type === "image") {
     return <View style={styles.attachmentFallback}><ImageIcon color={color.cyan} size={17} /><Text style={styles.attachmentText}>图片消息</Text></View>;
@@ -765,7 +791,7 @@ export function MessageContent({ message, onOpenRecord }: { message: ChatMessage
   if (message.type === "unknown" && !message.text) {
     return <View style={styles.attachmentFallback}><FileText color={color.textMuted} size={16} /><Text style={styles.attachmentText}>暂未解析的消息</Text></View>;
   }
-  return <Text style={styles.bubbleText}>{message.text ?? chatPreview(message)}</Text>;
+  return <Text style={styles.bubbleText}>{renderChatText(message.text ?? chatPreview(message))}</Text>;
 }
 
 function ReadonlyComposer() {
@@ -776,7 +802,7 @@ function ReadonlyComposer() {
         <ImageIcon color={color.textMuted} size={19} strokeWidth={1.8} />
         <Mic color={color.textMuted} size={19} strokeWidth={1.8} />
       </View>
-      <TextInput editable={false} placeholder="聊天记录为只读快照" placeholderTextColor={color.textMuted} style={styles.composerInput} />
+      <TextInput editable={false} placeholder="仅接收消息" placeholderTextColor={color.textMuted} style={styles.composerInput} />
       <View style={styles.composerSend}><Send color={color.textMuted} size={17} strokeWidth={1.8} /></View>
     </View>
   );
@@ -836,8 +862,18 @@ function isOwnMessage(message: ChatMessage, selfId: string | null): boolean {
   return Boolean(message.senderName && /^(我|本人|自己)$/u.test(message.senderName.trim()));
 }
 
+// 抖音内置小表情以文字代码传输（如 [宕机]），按字典换成行内小图，没收录的原样显示。
+function renderChatText(text: string): React.ReactNode {
+  const parts = splitChatEmoji(text);
+  if (!parts.some((part) => "emoji" in part)) return text;
+  return parts.map((part, index) => "emoji" in part
+    ? <Image accessibilityLabel={part.emoji} key={index} source={{ uri: part.url }} style={[styles.inlineEmoji, webInlineEmoji]} />
+    : part.text);
+}
+
 function chatPreview(message: ChatMessage): string {
   const text = cleanText(message.text);
+  if (message.type === "comment") return `[分享评论] ${cleanText(message.comment?.text) ?? text ?? (message.comment?.mediaType ? "评论附件" : "评论内容未提供")}`;
   if (text && !/^\[(?:图片|表情包|分享|通话)\]$/u.test(text)) return text;
   switch (message.type) {
     case "image": return "[图片]";
@@ -947,6 +983,14 @@ function Text({ style, ...rest }: TextProps) {
 }
 
 const styles = StyleSheet.create({
+  workspace: { flex: 1, minWidth: 0, minHeight: 0 },
+  receptionBar: { minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingHorizontal: 16, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: color.border, backgroundColor: color.sidebar },
+  receptionCopy: { flex: 1, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 7 },
+  receptionDot: { width: 6, height: 6, borderRadius: 3 },
+  receptionLabel: { color: color.textSecondary, fontSize: 11 },
+  receptionProgress: { color: color.textMuted, fontSize: 10 },
+  receptionButton: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 6, paddingHorizontal: 9, borderWidth: 1, borderColor: color.border, borderRadius: radius.medium },
+  receptionButtonText: { color: color.textSecondary, fontSize: 10 },
   root: { flex: 1, flexDirection: "row", minWidth: 0, minHeight: 0, backgroundColor: color.canvas },
   rootMobile: { flexDirection: "column" },
   listPane: { width: 334, flexShrink: 0, minHeight: 0, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: color.border, backgroundColor: color.sidebar },
@@ -1016,6 +1060,7 @@ const styles = StyleSheet.create({
   bubbleOwn: { borderTopRightRadius: 4, backgroundColor: color.cyanSoft },
   bubbleSticker: { minHeight: 0, paddingHorizontal: 0, paddingVertical: 0, borderRadius: 0, backgroundColor: "transparent" },
   bubbleText: { color: color.text, fontSize: 12, lineHeight: 19 },
+  inlineEmoji: { width: 16, height: 16, marginHorizontal: 1 },
   messageTime: { color: color.textMuted, fontSize: 8, marginTop: 4, marginLeft: 3 },
   messageTimeOwn: { marginRight: 3 },
   systemMessage: { alignSelf: "center", maxWidth: "86%", color: color.textMuted, fontSize: 9, lineHeight: 15, textAlign: "center", marginBottom: 16, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.small, backgroundColor: color.surface },
@@ -1028,6 +1073,18 @@ const styles = StyleSheet.create({
   shareTitle: { color: color.text, fontSize: 10, lineHeight: 15, fontWeight: "800" },
   shareAuthor: { color: color.textSecondary, fontSize: 9, marginTop: 3 },
   shareLabel: { color: color.textMuted, fontSize: 8, marginTop: 4 },
+  commentCard: { width: 280, maxWidth: "100%", gap: 10 },
+  commentAttribution: { color: color.textSecondary, fontSize: 12, lineHeight: 19 },
+  commentText: { color: color.text, fontSize: 13, lineHeight: 23 },
+  commentHint: { color: color.textMuted, fontSize: 10, lineHeight: 17 },
+  commentImage: { width: "100%", height: 150 },
+  commentSource: { flexDirection: "row", alignItems: "center", gap: 8, borderTopWidth: 1, borderTopColor: color.border, paddingTop: 10 },
+  commentSourceCopy: { flex: 1, minWidth: 0, gap: 3 },
+  commentSourceLabel: { color: color.textMuted, fontSize: 11, lineHeight: 17 },
+  commentSourceTitle: { color: color.text, fontSize: 12, lineHeight: 20 },
+  commentCoverFrame: { width: 58, height: 58, borderRadius: radius.small, overflow: "hidden", backgroundColor: color.surfaceMuted },
+  commentCover: { width: "100%", height: "100%" },
+  commentPlay: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, alignItems: "center", justifyContent: "center" },
   callMessage: { minWidth: 156, flexDirection: "row", alignItems: "center", gap: 9 },
   callIcon: { width: 30, height: 30, alignItems: "center", justifyContent: "center", borderRadius: 15, backgroundColor: color.cyanSoft },
   callCopy: { minWidth: 0 },

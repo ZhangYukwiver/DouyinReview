@@ -153,7 +153,7 @@ const monthAbbr = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP"
 const chatTypes: Array<{ id: ChatMessageType; label: string }> = [
   { id: "text", label: "文字" }, { id: "image", label: "图片" }, { id: "sticker", label: "表情" },
   { id: "share", label: "分享" }, { id: "call", label: "通话" }, { id: "voice", label: "语音" }, { id: "video", label: "视频" },
-  { id: "system", label: "系统" }, { id: "unknown", label: "其他" },
+  { id: "system", label: "系统" }, { id: "unknown", label: "其他" }, { id: "comment", label: "分享评论" },
 ];
 // Keep the five visual rows from the reference page while folding newer
 // message types into their closest interaction family.
@@ -169,6 +169,7 @@ function chatDisplayType(type: ChatMessageType): ChatMessageType | null {
     case "voice":
       return "call";
     case "video":
+    case "comment":
       return "share";
     // System notices are text-like; unknown payloads stay out of the chart.
     // New message types must be assigned here explicitly instead of falling

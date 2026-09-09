@@ -30,6 +30,7 @@ import {
   PanelLeftOpen,
   Play,
   RefreshCw,
+  Search,
   Settings2,
   Sparkles,
   Star,
@@ -57,13 +58,16 @@ import { buildReportModel } from "./ReportWorkspace";
 import { alpha, workspaceColors as color, workspaceFonts as font, workspaceRadii as radius } from "./workspaceTheme";
 import { ease, easeImage, fx, useCountUp, useDraw, useInView } from "./motion";
 
-export type WorkspaceViewKey = PersonalRecordType | "summary" | "highlights" | "chat";
+export type WorkspaceViewKey = PersonalRecordType | "summary" | "highlights" | "chat" | "explore";
 
 export interface ContentWorkspaceProps {
+  explore?: React.ReactNode;
   activeView: WorkspaceViewKey;
   records: PersonalRecordCollection;
   chatMessages?: ChatMessage[];
   chatConversations?: ChatConversationSummary[];
+  chatConnected?: boolean;
+  onToggleChatReception?: () => void;
   report: AnnualReport | LivingReport | null;
   sourceLabel: string;
   updatedAt: string | null;
@@ -93,6 +97,7 @@ type IconComponent = React.ComponentType<{
 }>;
 
 const navItems: Array<{ id: WorkspaceViewKey; label: string; icon: IconComponent; accent: string }> = [
+  { id: "explore", label: "探索", icon: Search, accent: color.cyan },
   { id: "watch_history", label: "观看历史", icon: History, accent: color.cyan },
   { id: "liked_videos", label: "喜欢", icon: Heart, accent: color.accent },
   { id: "favorite_videos", label: "收藏", icon: Bookmark, accent: color.amber },
@@ -116,10 +121,13 @@ function Text({ style, ...rest }: TextProps) {
 }
 
 export function ContentWorkspace({
+  explore,
   activeView,
   records,
   chatMessages = [],
   chatConversations = [],
+  chatConnected = false,
+  onToggleChatReception,
   report,
   sourceLabel,
   updatedAt,
@@ -164,6 +172,7 @@ export function ContentWorkspace({
     [chatConversations, chatMessages, records, report],
   );
   const counts: Record<WorkspaceViewKey, number> = {
+    explore: 0,
     watch_history: records.watch_history.length,
     liked_videos: records.liked_videos.length,
     favorite_videos: records.favorite_videos.length,
@@ -266,7 +275,7 @@ export function ContentWorkspace({
             <Text style={styles.topbarEyebrow}>{reportView ? "LIVING REPORT" : trace ? "CONTENT STREAMS" : "CONTENT ARCHIVE"}</Text>
             <View style={styles.topbarTitleRow}>
               <Text numberOfLines={1} style={[styles.topbarTitle, mobile && styles.topbarTitleMobile]}>{currentNav.label}</Text>
-              <Text style={styles.topbarCount}>{shownCount.toLocaleString("zh-CN")}</Text>
+              {activeView !== "explore" ? <Text style={styles.topbarCount}>{shownCount.toLocaleString("zh-CN")}</Text> : null}
             </View>
           </View>
           <View style={styles.topbarActions}>
@@ -280,7 +289,7 @@ export function ContentWorkspace({
                 <Sparkles color={color.accent} size={19} />
               </Pressable>
             ) : null}
-            <Pressable
+            {activeView !== "explore" ? <Pressable
               accessibilityLabel={privacy ? "关闭隐私模式" : "开启隐私模式"}
               accessibilityRole="switch"
               accessibilityState={{ checked: privacy }}
@@ -289,8 +298,8 @@ export function ContentWorkspace({
               style={({ pressed }) => [styles.toolbarButton, privacy && styles.toolbarButtonActive, pressed && styles.buttonPressed, webPointer]}
             >
               {privacy ? <EyeOff color={color.cyan} size={19} /> : <Eye color={color.textSecondary} size={19} />}
-            </Pressable>
-            <Pressable
+            </Pressable> : null}
+            {activeView !== "explore" ? <Pressable
               accessibilityLabel="重新增量读取记录"
               accessibilityRole="button"
               disabled={busy}
@@ -299,7 +308,7 @@ export function ContentWorkspace({
               style={({ pressed }) => [styles.toolbarButton, busy && styles.buttonDisabled, pressed && styles.buttonPressed, webPointer]}
             >
               {busy ? <ActivityIndicator color={color.cyan} size="small" /> : <RefreshCw color={color.textSecondary} size={19} />}
-            </Pressable>
+            </Pressable> : null}
             {mobile ? (
               <Pressable
                 accessibilityLabel="打开连接与采集设置"
@@ -326,9 +335,12 @@ export function ContentWorkspace({
           </Pressable>
         ) : null}
 
-        {activeView === "chat" ? (
+        {activeView === "explore" ? explore : activeView === "chat" ? (
           <ChatWorkspace
             busy={busy}
+            connected={chatConnected}
+            status={status}
+            onToggleReception={onToggleChatReception ?? onOpenSettings}
             conversations={chatConversations}
             messages={chatMessages}
             mobile={mobile}
@@ -391,7 +403,7 @@ export function ContentWorkspace({
             return (
               <Pressable
                 key={item.id}
-                accessibilityLabel={`${item.label}，${counts[item.id]} 条`}
+                accessibilityLabel={item.id === "explore" ? item.label : `${item.label}，${counts[item.id]} 条`}
                 accessibilityRole="tab"
                 accessibilityState={{ selected }}
                 onPress={() => changeView(item.id)}
@@ -468,7 +480,7 @@ function NavButton({
     <Pressable
       {...fx({ hover: "tint" })}
       testID={`workspace-nav-${item.id}`}
-      accessibilityLabel={`${item.label}，${count} 条`}
+      accessibilityLabel={item.id === "explore" ? item.label : `${item.label}，${count} 条`}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       onLayout={onLayoutTop ? (event) => onLayoutTop(event.nativeEvent.layout.y) : undefined}
@@ -485,7 +497,7 @@ function NavButton({
       </View>
       <View style={[styles.navMeta, collapseCopy, compact && styles.sidebarCopyHidden]}>
         <Text numberOfLines={1} style={[styles.navLabel, selected && styles.navLabelSelected]}>{item.label}</Text>
-        <Text style={[styles.navCount, selected && { color: item.accent }]}>{formatCompactNumber(count)}</Text>
+        {item.id !== "explore" ? <Text style={[styles.navCount, selected && { color: item.accent }]}>{formatCompactNumber(count)}</Text> : null}
       </View>
       {selected && Platform.OS !== "web" ? <View style={[styles.navIndicator, { backgroundColor: item.accent }]} /> : null}
     </Pressable>

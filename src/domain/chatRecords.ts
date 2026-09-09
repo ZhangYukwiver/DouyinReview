@@ -3,6 +3,7 @@ export type ChatMessageType =
   | "image"
   | "sticker"
   | "share"
+  | "comment"
   | "call"
   | "system"
   | "voice"
@@ -16,6 +17,16 @@ export interface ChatShare {
   author: string | null;
   coverUrl: string | null;
   url: string | null;
+}
+
+/** A video comment forwarded into a conversation; its author is not the sender. */
+export interface ChatComment {
+  id: string | null;
+  author: string | null;
+  text: string | null;
+  mediaUrl: string | null;
+  mediaType: "image" | "sticker" | "video" | null;
+  sourceType?: "video" | "image" | null;
 }
 
 export interface ChatMessage {
@@ -33,6 +44,8 @@ export interface ChatMessage {
   text: string | null;
   mediaUrl: string | null;
   share: ChatShare | null;
+  /** Comment-specific fields, absent in older snapshots. `share` holds the source video. */
+  comment?: ChatComment | null;
   /** 通话时长（秒）；接口未提供时保持 null，不从相邻消息时间推断。 */
   callDurationSeconds: number | null;
 }

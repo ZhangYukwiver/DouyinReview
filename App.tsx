@@ -69,6 +69,7 @@ import { shouldAutoSync } from "./src/services/autoSync";
 import { applyAppStyle, buildStoryEntryUrl, loadAppStyle, saveAppStyle, type AppStyle } from "./src/services/appStyle";
 import { buildStoryData, clearStoryData, writeStoryData } from "./src/services/storyData";
 import { buildReportModel } from "./src/components/workspace/ReportWorkspace";
+import { ExploreWorkspace } from "./src/components/workspace/ExploreWorkspace";
 
 type ViewKey = "summary" | "highlights" | "records" | "chat" | "sources";
 
@@ -167,10 +168,15 @@ function collectorErrorMessage(error: unknown): string {
   return error instanceof LocalCollectorError ? error.message : "本地采集服务暂时不可用。";
 }
 
+function opensExploreFromUrl(): boolean {
+  return Platform.OS === "web" && typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).get("workspace") === "explore";
+}
+
 function AppContent() {
-  const [activeView, setActiveView] = useState<ViewKey>("sources");
-  const [dashboardOpen, setDashboardOpen] = useState(false);
-  const [dashboardView, setDashboardView] = useState<LegacyWorkspaceViewKey>("summary");
+  const [activeView, setActiveView] = useState<ViewKey>(() => opensExploreFromUrl() ? "summary" : "sources");
+  const [dashboardOpen, setDashboardOpen] = useState(opensExploreFromUrl);
+  const [dashboardView, setDashboardView] = useState<LegacyWorkspaceViewKey>(() => opensExploreFromUrl() ? "explore" : "summary");
   const [privacy, setPrivacy] = useState(false);
   const [selectedArchive, setSelectedArchive] = useState<SelectedArchive | null>(null);
   const [pickingArchive, setPickingArchive] = useState(false);
@@ -193,6 +199,7 @@ function AppContent() {
   const [frozenSnapshot, setFrozenSnapshot] = useState<CollectorSnapshot | null>(null);
   const importRequest = useRef(0);
   const pollRequest = useRef(0);
+  const statusPollAbortRef = useRef<AbortController | null>(null);
   const downloadRequestRef = useRef(0);
   const downloadInFlightRef = useRef(new Set<string>());
   const connectingRef = useRef(false);
@@ -206,8 +213,19 @@ function AppContent() {
   const chatPollRequestRef = useRef<number | null>(null);
   const loginSyncTriggeredRef = useRef(false);
 
+  // 只记录新增探索页的位置；刷新可直接回来，原有页面的启动流程保持不变。
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const exploring = activeView !== "sources" && dashboardOpen && dashboardView === "explore" && !storySrc;
+    if (exploring) url.searchParams.set("workspace", "explore");
+    else if (url.searchParams.get("workspace") === "explore") url.searchParams.delete("workspace");
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, "", url);
+  }, [activeView, dashboardOpen, dashboardView, storySrc]);
+
   useEffect(() => () => {
     pollRequest.current += 1;
+    statusPollAbortRef.current?.abort();
     importRequest.current += 1;
     chatStartupPendingRef.current = false;
     chatStartupTriggeredRef.current = false;
@@ -276,8 +294,8 @@ function AppContent() {
     ? {
         source: "collector",
         records: shownSnapshot.records,
-        chatMessages: shownSnapshot.chatMessages,
-        chatConversations: shownSnapshot.chatConversations,
+        chatMessages: collectorSnapshot?.chatMessages ?? shownSnapshot.chatMessages,
+        chatConversations: collectorSnapshot?.chatConversations ?? shownSnapshot.chatConversations,
         warnings: shownSnapshot.warnings,
         updatedAt: shownSnapshot.updatedAt,
       }
@@ -352,8 +370,7 @@ function AppContent() {
     if (collectorBusy || switchingAccount || autoSyncInFlightRef.current || chatCollectionInFlightRef.current) return undefined;
     if (collectorStatus && !TERMINAL_COLLECTOR_STATES.has(collectorStatus.state)) return undefined;
 
-    // Let the foreground record refresh claim the collector first. The chat
-    // snapshot starts once per app session, then the collector closes it.
+    // Resume reception after an operation that needs the shared browser.
     const timer = setTimeout(() => {
       if (!chatStartupPendingRef.current || !collectorToken || collectorBusy || switchingAccount || autoSyncInFlightRef.current || chatCollectionInFlightRef.current) return;
       chatStartupPendingRef.current = false;
@@ -370,18 +387,29 @@ function AppContent() {
   }
 
   async function pollCollector(baseUrl: string, token: string, requestId: number) {
+    statusPollAbortRef.current?.abort();
+    const controller = new AbortController();
+    statusPollAbortRef.current = controller;
+    let revision: number | undefined;
+    let snapshotVersion: string | undefined;
     try {
       while (pollRequest.current === requestId) {
-        await delay(1_500);
+        const status = await getCollectorStatus(baseUrl, token, revision, controller.signal);
         if (pollRequest.current !== requestId) return;
-        const status = await getCollectorStatus(baseUrl, token);
-        if (pollRequest.current !== requestId) return;
+        revision = status.revision;
         setCollectorStatus(status);
         if (status.state === "observing") {
-          await refreshCollectorSnapshot(baseUrl, token, requestId);
+          if (status.phase === "chat_messages") {
+            chatCollectionInFlightRef.current = true;
+            chatPollRequestRef.current = requestId;
+          }
+          const nextVersion = JSON.stringify([status.updatedAt, status.counts]);
+          if (snapshotVersion !== nextVersion) {
+            if (!await refreshCollectorSnapshot(baseUrl, token, requestId)) return;
+            snapshotVersion = nextVersion;
+          }
           if (pollRequest.current !== requestId) return;
-          if (status.phase !== "chat_messages") setCollectorBusy(false);
-          continue;
+          setCollectorBusy(false);
         }
         if (TERMINAL_COLLECTOR_STATES.has(status.state)) {
           if (!await refreshCollectorSnapshot(baseUrl, token, requestId)) return;
@@ -404,9 +432,20 @@ function AppContent() {
           }
           return;
         }
+        // Older collectors do not support a revision cursor.
+        if (revision === undefined) await delay(1_000);
       }
     } catch (error) {
-      if (pollRequest.current !== requestId) return;
+      if (pollRequest.current !== requestId || controller.signal.aborted) return;
+      if (error instanceof LocalCollectorError && ["timeout", "unreachable"].includes(error.code)) {
+        setCollectorBusy(false);
+        setCollectorStatus((current) => current?.phase === "chat_messages"
+          ? { ...current, chatConnection: "reconnecting" }
+          : current);
+        await delay(1_500);
+        if (pollRequest.current === requestId) void pollCollector(baseUrl, token, requestId);
+        return;
+      }
       setCollectorBusy(false);
       autoSyncInFlightRef.current = false;
       if (chatPollRequestRef.current === requestId) {
@@ -416,7 +455,20 @@ function AppContent() {
       const message = collectorErrorMessage(error);
       setCollectorError(message);
       showAlert("无法读取同步状态", message);
+    } finally {
+      if (statusPollAbortRef.current === controller) statusPollAbortRef.current = null;
     }
+  }
+
+  async function pauseChatForOperation(baseUrl: string, token: string, requestId: number) {
+    if (!chatCollectionInFlightRef.current && collectorStatus?.phase !== "chat_messages") return true;
+    chatStartupPendingRef.current = true;
+    const status = await stopCollectorChatObservation(baseUrl, token);
+    if (pollRequest.current !== requestId) return false;
+    chatCollectionInFlightRef.current = false;
+    chatPollRequestRef.current = null;
+    setCollectorStatus(status);
+    return true;
   }
 
   async function beginSync(baseUrl: string, token: string, incremental = false) {
@@ -426,6 +478,7 @@ function AppContent() {
     setStoppingSync(false);
     setCollectorError(null);
     try {
+      if (!await pauseChatForOperation(baseUrl, token, requestId)) return;
       const status = incremental
         ? await startDirectRecordsSync(baseUrl, token)
         : await startCollectorSync(baseUrl, token);
@@ -452,7 +505,7 @@ function AppContent() {
       inFlight: autoSyncInFlightRef.current,
       switchingAccount,
       stoppingSync,
-      state: collectorStatus?.state ?? null,
+      state: collectorStatus?.phase === "chat_messages" && collectorStatus.state === "observing" ? "idle" : collectorStatus?.state ?? null,
     })) return;
     autoSyncInFlightRef.current = true;
     void beginSync(collectorUrl, token, true);
@@ -473,6 +526,7 @@ function AppContent() {
       if (TERMINAL_COLLECTOR_STATES.has(status.state)) {
         await refreshCollectorSnapshot(baseUrl, token, requestId);
         if (pollRequest.current !== requestId) return;
+        autoSyncInFlightRef.current = false;
         setCollectorBusy(false);
       } else {
         await pollCollector(baseUrl, token, requestId);
@@ -494,6 +548,7 @@ function AppContent() {
     setCollectorBusy(true);
     setCollectorError(null);
     try {
+      if (!await pauseChatForOperation(baseUrl, token, requestId)) return;
       const status = await startCollectorObservation(baseUrl, token);
       if (pollRequest.current !== requestId) return;
       setCollectorStatus(status);
@@ -541,7 +596,7 @@ function AppContent() {
       setCollectorBusy(false);
       const message = collectorErrorMessage(error);
       setCollectorError(message);
-      showAlert("无法读取聊天", message);
+      showAlert("无法开始接收消息", message);
     }
   }
 
@@ -567,6 +622,7 @@ function AppContent() {
   }
 
   async function endChatObservation(baseUrl: string, token: string) {
+    chatStartupPendingRef.current = false;
     const requestId = pollRequest.current + 1;
     pollRequest.current = requestId;
     setCollectorBusy(true);
@@ -587,7 +643,7 @@ function AppContent() {
       setCollectorBusy(false);
       const message = collectorErrorMessage(error);
       setCollectorError(message);
-      showAlert("无法取消聊天读取", message);
+      showAlert("无法暂停实时接收", message);
     }
   }
 
@@ -661,6 +717,11 @@ function AppContent() {
         chatStartupTriggeredRef.current = true;
         chatStartupPendingRef.current = true;
       }
+      if (status.phase === "chat_messages" && !TERMINAL_COLLECTOR_STATES.has(status.state)) {
+        chatStartupPendingRef.current = false;
+        chatCollectionInFlightRef.current = true;
+        chatPollRequestRef.current = requestId;
+      }
       if (revealSources) setActiveView("sources");
       if (TERMINAL_COLLECTOR_STATES.has(status.state)) {
         setCollectorBusy(false);
@@ -684,7 +745,7 @@ function AppContent() {
   }
 
   function confirmFullSync() {
-    if (!collectorToken || collectorBusy || collectorStatus?.state === "observing" || syncConfirmationOpenRef.current) return;
+    if (!collectorToken || collectorBusy || (collectorStatus?.state === "observing" && collectorStatus.phase !== "chat_messages") || syncConfirmationOpenRef.current) return;
     syncConfirmationOpenRef.current = true;
     confirmAlert(
       "开始读取全部可见记录",
@@ -698,7 +759,7 @@ function AppContent() {
   }
 
   function confirmIncrementalSync() {
-    if (!collectorToken || collectorBusy || collectorStatus?.state === "observing" || syncConfirmationOpenRef.current) return;
+    if (!collectorToken || collectorBusy || (collectorStatus?.state === "observing" && collectorStatus.phase !== "chat_messages") || syncConfirmationOpenRef.current) return;
     syncConfirmationOpenRef.current = true;
     confirmAlert(
       "增量读取",
@@ -1090,11 +1151,21 @@ function AppContent() {
         />
       ) : dashboardOpen || traceMode ? (
         <LegacyContentWorkspace
+          explore={<ExploreWorkspace connection={collectorToken ? { baseUrl: collectorUrl, token: collectorToken } : null} collectorBusy={collectorBusy} onOpenSettings={openSettings} onOpenRecord={openRecord} />}
           activeView={dashboardView}
           appStyle={appStyle}
           busy={collectorBusy}
           chatConversations={displaySnapshot?.chatConversations ?? []}
           chatMessages={displaySnapshot?.chatMessages ?? []}
+          chatConnected={collectorToken !== null}
+          onToggleChatReception={() => {
+            if (!collectorToken) { openSettings(); return; }
+            chatStartupTriggeredRef.current = true;
+            chatStartupPendingRef.current = false;
+            void (collectorStatus?.phase === "chat_messages"
+              ? endChatObservation(collectorUrl, collectorToken)
+              : beginChatObservation(collectorUrl, collectorToken));
+          }}
           onChangeView={setDashboardView}
           onDownloadRecord={downloadRecord}
           onLoadVideo={loadRecordVideo}
