@@ -49,6 +49,7 @@ import type {
   PersonalVideoRecord,
 } from "../../domain/personalRecords";
 import type { CollectorStatus } from "../../services/localCollector";
+import type { ExploreConnection } from "../../services/explorer";
 import type { AppStyle } from "../../services/appStyle";
 import Svg, { Circle } from "react-native-svg";
 import { ChatWorkspace } from "./ChatWorkspace";
@@ -77,6 +78,7 @@ export interface ContentWorkspaceProps {
   onOpenRecord: (url: string) => Promise<void>;
   onDownloadRecord?: (record: PersonalVideoRecord) => Promise<void>;
   onLoadVideo?: RecordVideoLoader;
+  commentsConnection?: ExploreConnection | null;
   downloadStates?: Record<string, RecordDownloadState>;
   onOpenSettings: () => void;
   onReplayStory: () => void;
@@ -137,6 +139,7 @@ export function ContentWorkspace({
   onOpenRecord,
   onDownloadRecord,
   onLoadVideo,
+  commentsConnection,
   downloadStates = {},
   onOpenSettings,
   onReplayStory,
@@ -365,6 +368,7 @@ export function ContentWorkspace({
             mobile={mobile}
             onDownloadRecord={onDownloadRecord}
             onLoadVideo={onLoadVideo}
+            commentsConnection={commentsConnection}
             onOpenRecord={onOpenRecord}
             onOpenSettings={onOpenSettings}
             privacy={privacy}
@@ -510,6 +514,7 @@ function RecordsGallery({
   mobile,
   onDownloadRecord,
   onLoadVideo,
+  commentsConnection,
   onOpenRecord,
   onOpenSettings,
   privacy,
@@ -523,6 +528,7 @@ function RecordsGallery({
   mobile: boolean;
   onDownloadRecord?: (record: PersonalVideoRecord) => Promise<void>;
   onLoadVideo?: RecordVideoLoader;
+  commentsConnection?: ExploreConnection | null;
   onOpenRecord: (url: string) => Promise<void>;
   onOpenSettings: () => void;
   privacy: boolean;
@@ -595,7 +601,7 @@ function RecordsGallery({
         ? <RecordTile
             downloadState={downloadStates[item.id] ?? "idle"}
             onDownloadRecord={onDownloadRecord}
-            onPlayRecord={onLoadVideo ? setPlayingRecord : undefined}
+            onPlayRecord={onLoadVideo && item.mediaType !== "image" && item.mediaType !== "live" ? setPlayingRecord : undefined}
             onOpenRecord={onOpenRecord}
             privacy={privacy}
             record={item}
@@ -605,7 +611,7 @@ function RecordsGallery({
       showsVerticalScrollIndicator={false}
     />
     {Platform.OS === "web" && playingRecord && !privacy && onLoadVideo ? (
-      <RecordVideoPlayer record={playingRecord} onLoadVideo={onLoadVideo} onClose={() => setPlayingRecord(null)} />
+      <RecordVideoPlayer record={playingRecord} records={sortedRecords} onLoadVideo={onLoadVideo} commentsConnection={commentsConnection} onOpenRecord={onOpenRecord} onClose={() => setPlayingRecord(null)} />
     ) : null}
     </>
   );

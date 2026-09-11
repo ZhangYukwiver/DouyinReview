@@ -1,11 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
-import { DouyinExplorer, ingestExploreResponse, maskHeadlessUserAgent, normalizeExploreComment, normalizeExploreUser, normalizeExploreVideo, validateExploreRequest } from "./explorer.mjs";
+import { DouyinExplorer, ingestExploreResponse, isExploreApiUrl, maskHeadlessUserAgent, normalizeExploreComment, normalizeExploreUser, normalizeExploreVideo, validateExploreRequest } from "./explorer.mjs";
 
 const author = { sec_uid: "test-public-author", nickname: "离线测试作者", follower_count: 0, follow_status: 0 };
 const aweme = (id) => ({ aweme_id: id, desc: "离线测试作品", author, create_time: 1788912000, user_digged: 0, collect_status: 1, statistics: { digg_count: 0 } });
 function session(kind = "videos") { return { kind, id: "", items: new Map(), received: false, revision: 0, hasMore: null }; }
 
 describe("explore data boundaries and pagination", () => {
+  it("recognizes the regional Douyin response host while keeping the API scope narrow", () => {
+    for (const host of ["www.douyin.com", "www-hj.douyin.com"]) {
+      expect(isExploreApiUrl(new URL(`https://${host}/aweme/v1/web/comment/list/?aweme_id=123456789`))).toBe(true);
+    }
+    for (const address of ["https://douyin.com.example.org/aweme/v1/web/comment/list/", "https://example.org/aweme/v1/web/comment/list/", "https://www-hj.douyin.com/other/", "http://www.douyin.com/aweme/v1/web/comment/list/"]) {
+      expect(isExploreApiUrl(new URL(address))).toBe(false);
+    }
+  });
   it("keeps zero distinct from missing metrics and unknown interaction states", () => {
     expect(normalizeExploreUser(author)).toMatchObject({ followers: 0, likes: null, followed: false });
     expect(normalizeExploreUser({ ...author, follow_status: 99 })).toMatchObject({ followed: null });
@@ -14,6 +22,11 @@ describe("explore data boundaries and pagination", () => {
   it("does not discard one-character comments or preserve arbitrary image URLs", () => {
     expect(normalizeExploreComment({ cid: "c1", text: "好", user: author, digg_count: 0 })).toMatchObject({ text: "好", likes: 0 });
     expect(normalizeExploreUser({ ...author, avatar_thumb: { url_list: ["https://example.invalid/a.png"] } }).avatar).toBeNull();
+  });
+  it("keeps sticker-only comments visible and filters untrusted comment images", () => {
+    expect(normalizeExploreComment({ cid: "sticker", text: "", sticker: { animate_url: { url_list: ["https://p3.douyinpic.com/sticker.webp"] } },
+      image_list: [{ origin_url: { url_list: ["https://example.invalid/image.png"] } }], user: author,
+    })).toMatchObject({ text: "", images: ["https://p3.douyinpic.com/sticker.webp"] });
   });
   it("merges subsequent pages and trusts an explicit end marker", () => {
     const state = session();
