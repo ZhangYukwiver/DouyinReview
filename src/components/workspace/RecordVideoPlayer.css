@@ -4,9 +4,9 @@
 .rv-backdrop button:disabled { opacity: .3; cursor: default; }
 .rv-backdrop button:focus-visible, .rv-backdrop input:focus-visible, .rv-backdrop video:focus-visible, .rv-comment-list:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
 .rv-layout { width: min(1180px,100%); height: min(900px,calc(100dvh - 48px)); overflow: hidden; border-radius: 18px; background: #101013; box-shadow: 0 24px 100px #000; }
-.rv-viewer { display: flex; position: relative; justify-content: center; height: 100%; overflow: hidden; touch-action: pan-x pinch-zoom; }
+.rv-viewer { display: flex; position: relative; justify-content: center; height: 100%; overflow: clip; touch-action: pan-x pinch-zoom; }
 .rv-ambient { position: absolute; inset: -50px; background-size: cover; background-position: center; filter: blur(35px) brightness(.22); pointer-events: none; }
-.rv-stage { position: relative; flex-shrink: 1; height: 100%; aspect-ratio: 9 / 16; min-width: 0; max-width: 100%; background: #000; animation: rv-enter .2s ease-out; }
+.rv-stage { position: relative; flex-shrink: 1; height: 100%; aspect-ratio: 9 / 16; min-width: 0; max-width: 100%; background: #000; animation: rv-enter .2s ease-out; user-select: none; }
 .rv-stage video { display: block; width: 100%; height: 100%; object-fit: contain; cursor: pointer; }
 .rv-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg,rgba(0,0,0,.52),transparent 18%,transparent 48%,rgba(0,0,0,.72) 89%,rgba(0,0,0,.88)); }
 .rv-topbar { position: absolute; inset: 12px 12px auto; display: flex; align-items: center; gap: 12px; text-shadow: 0 1px 8px #000; }

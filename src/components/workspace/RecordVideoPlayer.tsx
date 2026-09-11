@@ -29,7 +29,8 @@ export function RecordVideoPlayer({ record, records, onLoadVideo, commentsConnec
   const active = feed[index]!;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<HTMLDivElement | null>(null);
-  const touch = useRef<{ x: number; y: number } | null>(null);
+  const swipe = useRef<{ id: number; x: number; y: number; dragged: boolean } | null>(null);
+  const suppressClick = useRef(false);
   const move = (direction: number) => setIndex((current) => Math.max(0, Math.min(feed.length - 1, current + direction)));
   const toggleComments = () => {
     setCommentsOpen(!commentsOpen);
@@ -68,18 +69,50 @@ export function RecordVideoPlayer({ record, records, onLoadVideo, commentsConnec
       }}>
       <div className="rv-layout" aria-label="视频播放器" role="dialog" aria-modal="true">
         <div ref={viewerRef} className="rv-viewer"
-          onTouchStart={(event) => {
-            const first = event.touches[0];
-            touch.current = event.touches.length === 1 && first && !(event.target as Element).closest("button,input,a,[data-feed-controls],[data-comments-panel]")
-              ? { x: first.clientX, y: first.clientY } : null;
+          onPointerDown={(event) => {
+            swipe.current = null;
+            suppressClick.current = false;
+            const target = event.target as Element;
+            if (!event.isPrimary || event.button !== 0 ||
+              (target.closest("button,input,a,[data-feed-controls],[data-comments-panel]") && !target.closest(".rv-play-overlay"))) return;
+            swipe.current = { id: event.pointerId, x: event.clientX, y: event.clientY, dragged: false };
           }}
-          onTouchCancel={() => { touch.current = null; }}
-          onTouchEnd={(event) => {
-            const first = event.changedTouches[0], start = touch.current;
-            touch.current = null;
-            if (!first || !start) return;
-            const dy = start.y - first.clientY;
-            if (Math.abs(dy) >= 60 && Math.abs(dy) > Math.abs(start.x - first.clientX) * 1.3) move(dy > 0 ? 1 : -1);
+          onPointerMove={(event) => {
+            const start = swipe.current;
+            if (!start || start.id !== event.pointerId) return;
+            if (event.buttons === 0) { swipe.current = null; return; }
+            const dx = event.clientX - start.x, dy = event.clientY - start.y;
+            if (Math.max(Math.abs(dx), Math.abs(dy)) > 10) start.dragged = true;
+            if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx) * 1.3) {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              event.preventDefault();
+            }
+          }}
+          onPointerUp={(event) => {
+            const start = swipe.current;
+            if (!start || start.id !== event.pointerId) return;
+            swipe.current = null;
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+            const dy = start.y - event.clientY;
+            // A drag must not also click the video or its paused-play overlay.
+            suppressClick.current = start.dragged;
+            if (Math.abs(dy) >= 60 && Math.abs(dy) > Math.abs(start.x - event.clientX) * 1.3) {
+              suppressClick.current = true;
+              event.preventDefault();
+              move(dy > 0 ? 1 : -1);
+            }
+          }}
+          onPointerCancel={() => { swipe.current = null; }}
+          onLostPointerCapture={(event) => {
+            if (event.target === event.currentTarget) swipe.current = null;
+          }}
+          onDragStart={(event) => { if (swipe.current) event.preventDefault(); }}
+          onClickCapture={(event) => {
+            if (!suppressClick.current) return;
+            suppressClick.current = false;
+            if (event.detail === 0) return;
+            event.preventDefault();
+            event.stopPropagation();
           }}>
           {active.coverUrl ? <div className="rv-ambient" style={{ backgroundImage: `url(${JSON.stringify(active.coverUrl)})` }} aria-hidden="true" /> : null}
           <Playback key={active.id} record={active} onLoadVideo={onLoadVideo} muted={muted} onToggleMute={() => setMuted((value) => !value)}
