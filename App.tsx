@@ -1084,8 +1084,10 @@ function AppContent() {
   }
 
   function openDashboard() {
+    setStorySrc(null);
     setDashboardView("summary");
     setDashboardOpen(true);
+    setActiveView("summary");
   }
 
   function openSettings() {
@@ -1116,6 +1118,7 @@ function AppContent() {
           onConnect={() => connectCollector({ automaticPairing: true })}
           onDisconnect={disconnectCollector}
           onEnterWorkspace={enterWorkspace}
+          onOpenDashboard={openDashboard}
           onPickArchive={pickArchive}
           onStartIncrementalSync={confirmIncrementalSync}
           onStartObservation={() => collectorToken ? beginObservation(collectorUrl, collectorToken) : Promise.resolve()}

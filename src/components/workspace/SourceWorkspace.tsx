@@ -19,6 +19,7 @@ import {
   Eye,
   FileArchive,
   History,
+  LayoutDashboard,
   Link2,
   LockKeyhole,
   MessageCircle,
@@ -71,6 +72,7 @@ export interface SetupWorkspaceProps {
   onClearCache: () => void;
   onPickArchive: () => Promise<void>;
   onEnterWorkspace: () => void;
+  onOpenDashboard: () => void;
   autoSyncEnabled: boolean;
   onToggleAutoSync: () => void;
   appStyle: AppStyle;
@@ -106,6 +108,7 @@ export function SetupWorkspace({
   onConnect,
   onDisconnect,
   onEnterWorkspace,
+  onOpenDashboard,
   onPickArchive,
   onStartChatObservation,
   onStartFullSync,
@@ -143,7 +146,10 @@ export function SetupWorkspace({
       <View style={[styles.topbar, phone && styles.topbarPhone]}>
         <View style={styles.brand}><View style={styles.brandSeal}><Database color={color.accent} size={19} /></View><View><Text style={styles.brandName}>{copy.brand}</Text><Text style={styles.brandMeta}>{copy.brandMeta}</Text></View></View>
         <View style={styles.topStatus}><View {...fx({ motion: connected ? "pulse" : null })} style={[styles.statusDot, connected && styles.statusDotReady]} /><Text numberOfLines={1} style={styles.statusText}>{busy && ready ? `${source} · 采集中，报告用采集前的数据` : source}</Text></View>
-        <Pressable {...fx({ hover: "raise" })} accessibilityRole="button" disabled={!ready} onPress={onEnterWorkspace} style={({ pressed }) => [styles.enter, !ready && styles.disabled, pressed && styles.pressed, pointer]}><Text style={styles.enterText}>{phone ? "进入" : "打开报告"}</Text><ArrowRight color={color.buttonText} size={17} /></Pressable>
+        <View style={[styles.topActions, phone && styles.topActionsPhone]}>
+          <Pressable {...fx({ hover: "raise" })} accessibilityRole="button" onPress={onOpenDashboard} style={({ pressed }) => [styles.enter, styles.dashboardEntry, phone && styles.enterPhone, pressed && styles.pressed, pointer]}><LayoutDashboard color={color.accent} size={17} /><Text style={[styles.enterText, styles.dashboardEntryText]}>进入工作台</Text></Pressable>
+          <Pressable {...fx({ hover: "raise" })} accessibilityRole="button" disabled={!ready} onPress={onEnterWorkspace} style={({ pressed }) => [styles.enter, phone && styles.enterPhone, !ready && styles.disabled, pressed && styles.pressed, pointer]}><Text style={styles.enterText}>打开报告</Text><ArrowRight color={color.buttonText} size={17} /></Pressable>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={[styles.scrollContent, mobile && styles.scrollContentMobile]} showsVerticalScrollIndicator={false}>
@@ -223,10 +229,12 @@ function formatDate(value: string): string { const date = new Date(value); retur
 
 const styles = StyleSheet.create({
   root: { flex: 1, minHeight: "100%", backgroundColor: color.canvas }, flex: { flex: 1, minWidth: 0 },
-  topbar: { height: 70, flexDirection: "row", alignItems: "center", paddingHorizontal: 22, borderBottomWidth: 1, borderBottomColor: color.borderSoft, backgroundColor: color.sidebar }, topbarPhone: { height: 64, paddingHorizontal: 14 },
+  topbar: { height: 70, flexDirection: "row", alignItems: "center", paddingHorizontal: 22, borderBottomWidth: 1, borderBottomColor: color.borderSoft, backgroundColor: color.sidebar }, topbarPhone: { height: "auto", flexWrap: "wrap", rowGap: 12, paddingHorizontal: 14, paddingVertical: 12 },
   brand: { minWidth: 195, flexDirection: "row", alignItems: "center", gap: 10 }, brandSeal: { width: 38, height: 38, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: color.frame, borderRadius: 19 }, brandName: { color: color.text, fontSize: 15, fontWeight: "800" }, brandMeta: { color: color.textMuted, fontSize: 8, letterSpacing: 1.2, marginTop: 2, fontFamily: font.setupMono },
-  topStatus: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: color.textMuted }, statusDotReady: { backgroundColor: color.signal }, statusText: { color: color.textMuted, fontSize: 11 },
+  topStatus: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 }, statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: color.textMuted }, statusDotReady: { backgroundColor: color.signal }, statusText: { flexShrink: 1, color: color.textMuted, fontSize: 11 },
+  topActions: { flexDirection: "row", gap: 8 }, topActionsPhone: { width: "100%" },
   enter: { minWidth: 120, minHeight: 42, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 15, borderRadius: radius.pill, backgroundColor: color.button }, enterText: { color: color.buttonText, fontSize: 12, fontWeight: "800" },
+  enterPhone: { flex: 1, minWidth: 0 }, dashboardEntry: { borderWidth: 1, borderColor: color.frame, backgroundColor: color.surface }, dashboardEntryText: { color: color.accent },
   scrollContent: { flexGrow: 1, padding: 32 }, scrollContentMobile: { padding: 14, paddingBottom: 30 }, layout: { width: "100%", maxWidth: 1380, alignSelf: "center", flexDirection: "row", overflow: "hidden", borderWidth: 1, borderColor: color.border, borderRadius: radius.large, backgroundColor: color.sidebar, boxShadow: color.shadow }, layoutMobile: { flexDirection: "column", borderWidth: 0 },
   intro: { width: 330, padding: 34, borderRightWidth: 1, borderRightColor: color.border }, introMobile: { width: "100%" }, eyebrow: { color: color.signal, fontSize: 9, letterSpacing: 1.3, fontWeight: "900", fontFamily: font.setupMono }, title: { color: color.text, fontSize: 31, lineHeight: 42, marginTop: 18, fontFamily: font.serif }, titlePhone: { fontSize: 27, lineHeight: 36 }, lead: { color: color.textMuted, fontSize: 12, lineHeight: 20, marginTop: 15 }, seal: { width: 156, height: 156, alignItems: "center", justifyContent: "center", alignSelf: "center", marginTop: 44, borderRadius: 78, borderWidth: 1, borderColor: color.frame, backgroundColor: color.surface }, sealText: { color: color.accent, fontSize: 8, letterSpacing: 1.1, marginTop: 8, fontFamily: font.setupMono }, sealYear: { color: color.textMuted, fontSize: 10, marginTop: 3, fontFamily: font.setupMono }, steps: { gap: 16, marginTop: 44, paddingTop: 21, borderTopWidth: 1, borderTopColor: color.border }, step: { flexDirection: "row", gap: 11 }, stepIndex: { width: 28, height: 28, alignItems: "center", justifyContent: "center", borderRadius: 14, borderWidth: 1, borderColor: color.border }, stepIndexDone: { borderColor: color.signal, backgroundColor: color.signal }, stepIndexText: { color: color.textMuted, fontSize: 9 }, stepLabel: { color: color.text, fontSize: 11, fontWeight: "800" }, stepDetail: { color: color.textMuted, fontSize: 10, lineHeight: 15, marginTop: 3 },
   operations: { flex: 1, minWidth: 0, padding: 34 }, operationHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }, operationKicker: { color: color.signal, fontSize: 8, letterSpacing: 1.2, fontWeight: "900", fontFamily: font.setupMono }, operationTitle: { color: color.text, fontSize: 21, marginTop: 6, fontFamily: font.serif }, operationMeta: { color: color.textMuted, fontSize: 10, marginTop: 4 }, readyPill: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderWidth: 1, borderColor: color.border, borderRadius: radius.pill }, readyPillReady: { borderColor: color.signal, backgroundColor: color.cyanSoft }, readyDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: color.textMuted }, readyText: { color: color.textMuted, fontSize: 9 },
