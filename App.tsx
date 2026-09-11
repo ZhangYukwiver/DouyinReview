@@ -653,6 +653,7 @@ function AppContent() {
     let requestedUrl = options.baseUrl ?? collectorUrl;
     let requestedPairingCode = options.pairingCode ?? pairingCode;
     const revealSources = options.revealSources ?? true;
+    if (revealSources) setActiveView("sources");
     const requestId = pollRequest.current + 1;
     pollRequest.current = requestId;
     let normalizedUrl: string | null = null;
@@ -722,7 +723,6 @@ function AppContent() {
         chatCollectionInFlightRef.current = true;
         chatPollRequestRef.current = requestId;
       }
-      if (revealSources) setActiveView("sources");
       if (TERMINAL_COLLECTOR_STATES.has(status.state)) {
         setCollectorBusy(false);
       } else {
@@ -1172,6 +1172,7 @@ function AppContent() {
           onChangeView={setDashboardView}
           onDownloadRecord={downloadRecord}
           onLoadVideo={loadRecordVideo}
+          commentsConnection={collectorToken ? { baseUrl: collectorUrl, token: collectorToken } : null}
           onOpenRecord={openRecord}
           onOpenSettings={openSettings}
           onReplayStory={replayStory}

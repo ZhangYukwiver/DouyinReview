@@ -10,6 +10,7 @@ export interface ExploreVideo extends PersonalVideoRecord {
 }
 export interface ExploreComment {
   id: string; text: string; name: string; author: ExploreUser | null; likes: number | null; replies: number; publishedAt: string | null;
+  images?: string[];
 }
 export type ExploreKind = "users" | "videos" | "profile" | "detail" | "comments";
 export interface ExploreQuery { kind: ExploreKind; query?: string; id?: string; sessionId?: string }

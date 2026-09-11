@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { ArrowLeft, ArrowUpRight, Bookmark, Check, ChevronRight, Heart, MessageCircle, Play, Search, UserRound, Users, X } from "lucide-react-native";
-import { closeExplore, interactExplore, loadExploreVideo, readExplore, type ExploreAction, type ExploreComment, type ExploreConnection, type ExplorePage, type ExploreQuery, type ExploreUser, type ExploreVideo } from "../../services/explorer";
+import { closeExplore, interactExplore, readExplore, type ExploreAction, type ExploreComment, type ExploreConnection, type ExplorePage, type ExploreQuery, type ExploreUser, type ExploreVideo } from "../../services/explorer";
+import { loadCollectorVideo } from "../../services/localCollector";
 import { RecordVideoPlayer } from "./RecordVideoPlayer";
 import { workspaceColors as color, workspaceFonts as font, workspaceRadii as radius } from "./workspaceTheme";
 
@@ -40,7 +41,7 @@ export function ExploreWorkspace({ connection, collectorBusy, onOpenSettings, on
   const [intent, setIntent] = useState<ActionIntent | null>(null);
   const [sending, setSending] = useState(false);
   const [pending, setPending] = useState<string[]>([]);
-  const [playing, setPlaying] = useState<{ video: ExploreVideo; sessionId: string } | null>(null);
+  const [playing, setPlaying] = useState<ExploreVideo | null>(null);
   const [gridWidth, setGridWidth] = useState(0);
   const requestRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<ScrollView | null>(null);
@@ -172,7 +173,7 @@ export function ExploreWorkspace({ connection, collectorBusy, onOpenSettings, on
     {video ? <View style={[styles.detailLayout, width < 1080 && styles.detailStack]}>
       <View style={[styles.mediaColumn, width < 1080 && { width: "100%" }]}>
         {video.images.length ? <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.imageGallery}>{video.images.map((uri, i) => <Image key={uri} accessibilityLabel={`作品图片 ${i + 1}`} source={{ uri }} style={[styles.workImage, { width: narrow ? 260 : 360 }]} resizeMode="contain" />)}</ScrollView>
-          : <Pressable accessibilityRole="button" accessibilityLabel="播放当前作品" disabled={!connection || busy || !detail} onPress={() => detail && setPlaying({ video, sessionId: detail.sessionId })} style={styles.detailCover}>
+          : <Pressable accessibilityRole="button" accessibilityLabel="播放当前作品" disabled={!connection || busy || !detail} onPress={() => detail && setPlaying(video)} style={styles.detailCover}>
             {video.coverUrl ? <Image source={{ uri: video.coverUrl }} style={StyleSheet.absoluteFill} resizeMode="contain" /> : null}<View style={styles.play}><Play size={28} color="#fff" fill="#fff" /></View><Text style={styles.playLabel}>播放视频</Text>
           </Pressable>}
         <Button label="在抖音打开作品" onPress={() => video.url && void onOpenRecord(video.url)}><ArrowUpRight size={16} color={color.text} /></Button>
@@ -215,7 +216,9 @@ export function ExploreWorkspace({ connection, collectorBusy, onOpenSettings, on
         <View style={styles.modalActions}><Button label="取消" onPress={() => setIntent(null)} /><Button label={intent?.action === "comment" ? "确认发送" : "确认操作"} primary onPress={() => void commitAction()}><Check size={16} color={color.buttonText} /></Button></View>
       </View></View>
     </Modal>
-    {playing && connection ? <RecordVideoPlayer record={playing.video} onLoadVideo={(_, signal) => loadExploreVideo(connection, playing.sessionId, signal)} onClose={() => setPlaying(null)} /> : null}
+    {playing && connection ? <RecordVideoPlayer record={playing} records={(profile?.items ?? (results?.kind === "videos" ? results.items : [])) as ExploreVideo[]}
+      commentsConnection={connection} onOpenRecord={onOpenRecord}
+      onLoadVideo={(item, signal) => loadCollectorVideo(connection.baseUrl, connection.token, item.url!, signal)} onClose={() => setPlaying(null)} /> : null}
   </ScrollView>;
 }
 

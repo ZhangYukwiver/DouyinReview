@@ -30,6 +30,8 @@ export function normalizeExploreComment(raw) {
   if (!raw || !raw.cid || typeof raw.text !== "string") return null;
   const date = number(raw.create_time);
   return { id: String(raw.cid), text: text(raw.text, 3000), author: normalizeExploreUser(raw.user),
+    images: [image(raw.sticker?.animate_url ?? raw.sticker?.static_url),
+      ...(Array.isArray(raw.image_list) ? raw.image_list : []).map((item) => image(item.origin_url ?? item))].filter(Boolean).slice(0, 6),
     name: text(raw.user?.nickname) || "抖音用户", likes: number(raw.digg_count), replies: number(raw.reply_comment_total) ?? 0,
     publishedAt: date && date < 4_102_444_800 ? new Date(date * 1000).toISOString() : null };
 }
@@ -37,6 +39,11 @@ export function normalizeExploreComment(raw) {
 // The first response each kind depends on; an empty body there is Douyin's risk control, not a missing login.
 const PRIMARY_RESPONSE = { users: /\/(?:discover\/search|search\/user)\/$/u, videos: /\/search\/(?:item|single)\/$/u,
   profile: /\/aweme\/post\/$/u, detail: /\/aweme\/detail\/$/u, comments: /\/comment\/list\/$/u };
+
+export function isExploreApiUrl(url) {
+  return url.protocol === "https:" && ["www.douyin.com", "www-hj.douyin.com"].includes(url.hostname)
+    && url.pathname.startsWith("/aweme/v1/web/");
+}
 
 // Douyin answers search APIs with an empty body when the UA says HeadlessChrome; the same profile works once the marker is gone.
 export async function maskHeadlessUserAgent(page) {
@@ -117,7 +124,7 @@ export class DouyinExplorer {
     page.on("response", (response) => {
       void (async () => {
         const url = new URL(response.url());
-        if (url.hostname !== "www.douyin.com" || !url.pathname.startsWith("/aweme/v1/web/")) return;
+        if (!isExploreApiUrl(url)) return;
         if (input.kind === "comments" && url.searchParams.get("aweme_id") !== input.id) return;
         if (input.kind === "profile" && url.pathname.endsWith("/aweme/post/") && url.searchParams.get("sec_user_id") !== input.id) return;
         if (["users", "videos"].includes(input.kind) && url.searchParams.get("keyword") !== input.query) return;
