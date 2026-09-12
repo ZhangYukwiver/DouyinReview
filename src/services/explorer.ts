@@ -11,12 +11,14 @@ export interface ExploreVideo extends PersonalVideoRecord {
 export interface ExploreComment {
   id: string; text: string; name: string; author: ExploreUser | null; likes: number | null; replies: number; publishedAt: string | null;
   images?: string[];
+  parentId?: string | null; replyToName?: string | null;
 }
-export type ExploreKind = "users" | "videos" | "profile" | "detail" | "comments";
-export interface ExploreQuery { kind: ExploreKind; query?: string; id?: string; sessionId?: string }
+export type ExploreKind = "users" | "videos" | "profile" | "detail" | "comments" | "replies";
+export interface ExploreQuery { kind: ExploreKind; query?: string; id?: string; sessionId?: string; commentId?: string }
 export interface ExplorePage {
   sessionId: string; kind: ExploreKind; items: Array<ExploreUser | ExploreVideo | ExploreComment>;
   profile: ExploreUser | null; video: ExploreVideo | null; hasMore: boolean | null; limited: boolean;
+  commentId?: string;
 }
 export interface ExploreAction {
   sessionId: string; requestId: string; action: "like" | "collect" | "follow" | "comment"; desired?: boolean; text?: string;
@@ -47,7 +49,8 @@ async function request(connection: ExploreConnection, route: string, body: unkno
 }
 export async function readExplore(connection: ExploreConnection, query: ExploreQuery, signal?: AbortSignal): Promise<ExplorePage> {
   const result = await request(connection, "read", query, signal) as ExplorePage;
-  if (!result || typeof result.sessionId !== "string" || result.kind !== query.kind || !Array.isArray(result.items))
+  if (!result || typeof result.sessionId !== "string" || result.kind !== query.kind || !Array.isArray(result.items) ||
+    (query.kind === "replies" && (result.commentId !== query.commentId || result.sessionId !== query.sessionId)))
     throw new LocalCollectorError("invalid_response", "探索数据格式无效，请更新采集器。");
   return result;
 }
